@@ -1,0 +1,11 @@
+{
+  "name": "保质岛 - 家庭物品管理",
+  "short_name": "保质岛",
+  "description": "动森风格的家庭物品保质期管理，先进先出不浪费",
+  "start_url": "/shelflife/",
+  "display": "standalone",
+  "background_color": "#FFFBF0",
+  "theme_color": "#78C850",
+  "orientation": "portrait",
+  "icons": []
+}
