@@ -1,409 +1,1006 @@
-// ── 常量 ──────────────────────────────────────────────────
-const LABELS = ['','至暗','低谷','沉郁','平淡','尚可','普通','不错','良好','美好','极致'];
-const EMOJIS = ['','😔','😞','😕','😐','🙂','😊','😄','🌟','✨','🌈'];
+// ── 保质岛 App ────────────────────────────────────────────
+(function() {
+  'use strict';
 
-function scoreColor(s) {
-  if (s <= 3) return 'var(--s-low)';
-  if (s <= 6) return 'var(--s-mid)';
-  if (s <= 8) return 'var(--s-good)';
-  return 'var(--s-best)';
-}
-function dotClass(s) {
-  if (!s && s !== 0) return 'none';
-  if (s <= 3) return 'low';
-  if (s <= 6) return 'mid';
-  if (s <= 8) return 'good';
-  return 'best';
-}
-function esc(s) {
-  return String(s || '')
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
+  var STATE = {
+    tab: 'home',
+    drillCategory: null,
+    invFilter: 'all',
+    invSearch: '',
+    editingId: null,
+    modalStack: []
+  };
 
-// ── 全局状态 ───────────────────────────────────────────────
-var TODAY_STR = GanZhi.formatDate(new Date());
-var STATE = {
-  tab: 'today',
-  calYear:  new Date().getFullYear(),
-  calMonth: new Date().getMonth() + 1,
-  todayEditing: false,
-  detailDate: null,
-  detailEditing: false
-};
+  var GREETINGS = [
+    '今天也要好好整理哦~', '检查一下库存吧！', '先进先出，不浪费~',
+    '保质岛欢迎你回来！', '来看看有什么快到期了~', '勤整理，好生活！'
+  ];
 
-// ── Toast ──────────────────────────────────────────────────
-function showToast(msg) {
-  var el = document.getElementById('toast');
-  if (!el) return;
-  el.textContent = msg;
-  el.classList.remove('hidden');
-  clearTimeout(el._t);
-  el._t = setTimeout(function() { el.classList.add('hidden'); }, 1800);
-}
-
-// ── Tab 切换 ───────────────────────────────────────────────
-function switchTab(tab) {
-  STATE.tab = tab;
-  document.querySelectorAll('.tab-btn').forEach(function(b) {
-    b.classList.toggle('active', b.dataset.tab === tab);
-  });
-  document.getElementById('view-today').classList.toggle('hidden', tab !== 'today');
-  document.getElementById('view-calendar').classList.toggle('hidden', tab !== 'calendar');
-  if (tab === 'today')    renderToday();
-  if (tab === 'calendar') renderCalendar();
-}
-
-// ── Today view ─────────────────────────────────────────────
-function renderToday() {
-  var el = document.getElementById('view-today');
-  if (!el) return;
-
-  var date   = GanZhi.parseDate(TODAY_STR);
-  var gz     = GanZhi.getFullGanZhi(date);
-  var rec    = Storage.getRecord(TODAY_STR);
-  var score  = rec ? rec.score : 7;
-  var note   = rec ? rec.note  : '';
-  var hasRec = !!rec;
-  var editing = STATE.todayEditing;
-
-  // 近期记录
-  var allRecs = Storage.getAllRecords();
-  var recents = Object.keys(allRecs)
-    .sort(function(a,b){ return b < a ? -1 : b > a ? 1 : 0; })
-    .slice(0, 8);
-
-  var html = '<div class="date-header">'
-    + '<div class="solar-date">' + TODAY_STR + '</div>'
-    + '<div class="ganzhi-full">' + gz.full + '</div>'
-    + '<div class="ganzhi-pills">'
-    + '<span class="pill">' + gz.year.ganzhi + '年（' + gz.year.sx + '）</span>'
-    + '<span class="pill">' + gz.month.ganzhi + '月</span>'
-    + '<span class="pill">' + gz.day.ganzhi + '日</span>'
-    + '</div></div>';
-
-  if (hasRec && !editing) {
-    html += '<div class="card">'
-      + '<div class="record-row">'
-      + '<span class="big-emoji">' + EMOJIS[score] + '</span>'
-      + '<div><div class="record-score" style="color:' + scoreColor(score) + '">' + score + ' 分</div>'
-      + '<div class="record-sub">' + LABELS[score] + '</div></div>'
-      + '</div>'
-      + (note ? '<div class="note-display">' + esc(note) + '</div>' : '')
-      + '<div class="btn-row">'
-      + '<button class="btn-outline" id="t-edit">修改</button>'
-      + '<button class="btn-ghost" id="t-del">删除</button>'
-      + '</div></div>';
-  } else {
-    html += '<div class="card">'
-      + '<div class="score-form-top">'
-      + '<span class="score-emoji" id="t-emoji">' + EMOJIS[score] + '</span>'
-      + '<span class="score-number" id="t-num" style="color:' + scoreColor(score) + '">' + score + '</span>'
-      + '<span class="score-word" id="t-word">' + LABELS[score] + '</span>'
-      + '</div>'
-      + '<input type="range" id="t-slider" class="score-slider" min="1" max="10" value="' + score + '">'
-      + '<div class="slider-labels"><span>至暗</span><span class="gold">极致</span></div>'
-      + '<textarea id="t-note" class="note-input" placeholder="记录今日感受（选填）" maxlength="300">' + esc(note) + '</textarea>'
-      + '<div class="btn-row">'
-      + '<button class="btn-primary" id="t-save">' + (editing ? '保存修改' : '记录今日') + '</button>'
-      + (editing ? '<button class="btn-ghost" id="t-cancel">取消</button>' : '')
-      + '</div></div>';
+  function esc(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function today() {
+    var d = new Date();
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   }
 
-  if (recents.length > 0) {
-    html += '<div class="section-title">最近记录</div>';
-    recents.forEach(function(ds) {
-      var r  = allRecs[ds];
-      var dz = GanZhi.getDayGanZhi(GanZhi.parseDate(ds));
-      html += '<div class="recent-item" data-ds="' + ds + '">'
-        + '<div><div class="recent-date">' + ds + (ds === TODAY_STR ? ' · 今日' : '') + '</div>'
-        + '<div class="recent-gz">' + dz.ganzhi + '日</div></div>'
-        + '<div class="recent-right">'
-        + '<span class="recent-emoji">' + EMOJIS[r.score] + '</span>'
-        + '<span class="recent-score" style="color:' + scoreColor(r.score) + '">' + r.score + '分</span>'
-        + '</div></div>';
-    });
+  // ── Toast & Confirm ───────────────────────────────────
+  function showToast(msg) {
+    var el = document.getElementById('toast');
+    el.textContent = msg; el.classList.remove('hidden');
+    clearTimeout(el._t);
+    el._t = setTimeout(function(){ el.classList.add('hidden'); }, 2000);
   }
 
-  el.innerHTML = html;
-
-  // 绑定事件
-  var slider = document.getElementById('t-slider');
-  if (slider) {
-    slider.addEventListener('input', function() {
-      var s = +this.value;
-      var emoji = document.getElementById('t-emoji');
-      if (emoji) { emoji.textContent = EMOJIS[s]; emoji.classList.add('pop'); setTimeout(function(){ emoji.classList.remove('pop'); }, 150); }
-      var num = document.getElementById('t-num');
-      if (num) { num.textContent = s; num.style.color = scoreColor(s); }
-      var word = document.getElementById('t-word');
-      if (word) word.textContent = LABELS[s];
-    });
+  function showConfirm(msg, icon, onOk, isDanger) {
+    var ov = document.createElement('div');
+    ov.className = 'confirm-overlay';
+    ov.innerHTML = '<div class="confirm-box"><div class="confirm-icon">'+(icon||'🍃')+'</div>'
+      +'<div class="confirm-msg">'+msg+'</div><div class="confirm-btns">'
+      +'<button class="confirm-cancel">取消</button>'
+      +'<button class="'+(isDanger?'confirm-danger':'confirm-ok')+'">'+(isDanger?'确认删除':'确认')+'</button>'
+      +'</div></div>';
+    document.getElementById('app').appendChild(ov);
+    ov.querySelector('.confirm-cancel').onclick = function(){ ov.remove(); };
+    ov.querySelector('.'+(isDanger?'confirm-danger':'confirm-ok')).onclick = function(){ ov.remove(); if(onOk) onOk(); };
   }
 
-  var btnSave = document.getElementById('t-save');
-  if (btnSave) {
-    btnSave.addEventListener('click', function() {
-      var s = +(document.getElementById('t-slider').value);
-      var n = document.getElementById('t-note').value;
-      Storage.saveRecord(TODAY_STR, s, n);
-      STATE.todayEditing = false;
-      showToast('已记录 ✓');
-      renderToday();
-    });
+  // ── Tab / Nav ─────────────────────────────────────────
+  function switchTab(tab) {
+    STATE.tab = tab;
+    if (tab !== 'inventory') STATE.drillCategory = null;
+    document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===tab); });
+    ['home','inventory','add','settings'].forEach(function(v){ document.getElementById('view-'+v).classList.toggle('hidden', v!==tab); });
+    render();
+    document.querySelector('.main-content').scrollTop = 0;
   }
 
-  var btnEdit = document.getElementById('t-edit');
-  if (btnEdit) btnEdit.addEventListener('click', function() { STATE.todayEditing = true; renderToday(); });
+  function drillToCategory(catId) {
+    STATE.drillCategory = catId;
+    STATE.invFilter = 'all';
+    STATE.invSearch = '';
+    switchTab('inventory');
+  }
 
-  var btnCancel = document.getElementById('t-cancel');
-  if (btnCancel) btnCancel.addEventListener('click', function() { STATE.todayEditing = false; renderToday(); });
-
-  var btnDel = document.getElementById('t-del');
-  if (btnDel) btnDel.addEventListener('click', function() {
-    if (confirm('确定删除今日记录？')) {
-      Storage.deleteRecord(TODAY_STR);
-      STATE.todayEditing = false;
-      renderToday();
+  function render() {
+    updateBadge();
+    switch(STATE.tab) {
+      case 'home': renderHome(); break;
+      case 'inventory': renderInventory(); break;
+      case 'add': renderAdd(); break;
+      case 'settings': renderSettings(); break;
     }
-  });
-
-  el.querySelectorAll('.recent-item').forEach(function(item) {
-    item.addEventListener('click', function() { showDetail(item.dataset.ds); });
-  });
-}
-
-// ── Calendar view ──────────────────────────────────────────
-function renderCalendar() {
-  var el = document.getElementById('view-calendar');
-  if (!el) return;
-
-  var year    = STATE.calYear;
-  var month   = STATE.calMonth;
-  var records = Storage.getMonthRecords(year, month);
-  var firstDay = new Date(year, month - 1, 1);
-  var gz = GanZhi.getFullGanZhi(firstDay);
-
-  var recList = Object.values(records);
-  var count = recList.length;
-  var avg = count
-    ? (recList.reduce(function(s,r){ return s + r.score; }, 0) / count).toFixed(1)
-    : null;
-
-  // 格子
-  var daysInMonth = new Date(year, month, 0).getDate();
-  var startWday = (firstDay.getDay() + 6) % 7; // 周一=0
-  var cells = [];
-  for (var i = 0; i < startWday; i++) cells.push(null);
-  for (var d = 1; d <= daysInMonth; d++) {
-    var date = new Date(year, month - 1, d);
-    var ds   = GanZhi.formatDate(date);
-    var gzd  = GanZhi.getDayGanZhi(date);
-    var rec  = records[ds] || null;
-    cells.push({ d: d, ds: ds, gz: gzd.ganzhi, score: rec ? rec.score : null, today: ds === TODAY_STR });
-  }
-  while (cells.length % 7) cells.push(null);
-
-  var weeks = [];
-  for (var j = 0; j < cells.length; j += 7) weeks.push(cells.slice(j, j + 7));
-
-  var statsHtml = count
-    ? '<div class="month-stats">'
-      + '<div class="stat-item"><div class="stat-val">' + count + '</div><div class="stat-lbl">已记录</div></div>'
-      + '<div class="stat-div"></div>'
-      + '<div class="stat-item"><div class="stat-val" style="color:' + scoreColor(Math.round(+avg)) + '">' + avg + '</div><div class="stat-lbl">月均分</div></div>'
-      + '<div class="stat-div"></div>'
-      + '<div class="stat-item" id="cal-today-btn"><div class="stat-val" style="font-size:13px;color:var(--dim)">回今月</div></div>'
-      + '</div>'
-    : '<div class="month-stats">'
-      + '<div class="stat-item"><div class="stat-val" style="font-size:15px;color:var(--dim)">本月暂无记录</div></div>'
-      + '<div class="stat-div"></div>'
-      + '<div class="stat-item" id="cal-today-btn"><div class="stat-val" style="font-size:13px;color:var(--dim)">回今月</div></div>'
-      + '</div>';
-
-  var gridHtml = weeks.map(function(week) {
-    return '<div class="cal-week">' + week.map(function(cell) {
-      if (!cell) return '<div class="day-cell empty"></div>';
-      return '<div class="day-cell' + (cell.today ? ' today' : '') + '" data-ds="' + cell.ds + '">'
-        + '<div class="day-num">' + cell.d + '</div>'
-        + '<div class="day-gz">' + cell.gz + '</div>'
-        + '<div class="score-dot ' + dotClass(cell.score) + '"></div>'
-        + '</div>';
-    }).join('') + '</div>';
-  }).join('');
-
-  el.innerHTML = '<div class="month-nav">'
-    + '<button class="nav-btn" id="cal-prev">‹</button>'
-    + '<div class="month-center">'
-    + '<div class="month-solar">' + year + '年' + month + '月</div>'
-    + '<div class="month-ganzhi">' + gz.year.ganzhi + '（' + gz.year.sx + '）年 · ' + gz.month.ganzhi + '月</div>'
-    + '</div>'
-    + '<button class="nav-btn" id="cal-next">›</button>'
-    + '</div>'
-    + statsHtml
-    + '<div class="weekdays">'
-    + ['一','二','三','四','五','六','日'].map(function(d,i){ return '<div class="weekday' + (i>=5?' weekend':'') + '">' + d + '</div>'; }).join('')
-    + '</div>'
-    + '<div class="cal-grid">' + gridHtml + '</div>'
-    + '<div class="legend">'
-    + '<div class="legend-item"><div class="legend-dot" style="background:var(--s-low)"></div>低(1-3)</div>'
-    + '<div class="legend-item"><div class="legend-dot" style="background:var(--s-mid)"></div>中(4-6)</div>'
-    + '<div class="legend-item"><div class="legend-dot" style="background:var(--s-good)"></div>好(7-8)</div>'
-    + '<div class="legend-item"><div class="legend-dot" style="background:var(--s-best)"></div>极(9-10)</div>'
-    + '</div>';
-
-  document.getElementById('cal-prev').addEventListener('click', function() {
-    STATE.calMonth--;
-    if (STATE.calMonth < 1) { STATE.calMonth = 12; STATE.calYear--; }
-    renderCalendar();
-  });
-  document.getElementById('cal-next').addEventListener('click', function() {
-    STATE.calMonth++;
-    if (STATE.calMonth > 12) { STATE.calMonth = 1; STATE.calYear++; }
-    renderCalendar();
-  });
-  var todayBtn = document.getElementById('cal-today-btn');
-  if (todayBtn) todayBtn.addEventListener('click', function() {
-    var now = new Date();
-    STATE.calYear  = now.getFullYear();
-    STATE.calMonth = now.getMonth() + 1;
-    renderCalendar();
-  });
-  el.querySelectorAll('.day-cell:not(.empty)').forEach(function(cell) {
-    cell.addEventListener('click', function() { showDetail(cell.dataset.ds); });
-  });
-}
-
-// ── Detail 弹窗 ────────────────────────────────────────────
-function showDetail(dateStr) {
-  STATE.detailDate    = dateStr;
-  STATE.detailEditing = !Storage.getRecord(dateStr);
-  renderDetail();
-  document.getElementById('modal-overlay').classList.remove('hidden');
-}
-
-function hideDetail() {
-  document.getElementById('modal-overlay').classList.add('hidden');
-  if (STATE.tab === 'today')    renderToday();
-  if (STATE.tab === 'calendar') renderCalendar();
-}
-
-function renderDetail() {
-  var dateStr = STATE.detailDate;
-  var date    = GanZhi.parseDate(dateStr);
-  var gz      = GanZhi.getFullGanZhi(date);
-  var rec     = Storage.getRecord(dateStr);
-  var score   = rec ? rec.score : 7;
-  var note    = rec ? rec.note  : '';
-  var editing = STATE.detailEditing;
-  var isToday = dateStr === TODAY_STR;
-
-  var headerHtml = '<div class="modal-date-header">'
-    + '<div class="modal-solar">' + dateStr + (isToday ? ' · 今日' : '') + '</div>'
-    + '<div class="modal-ganzhi">' + gz.full + '</div>'
-    + '<div class="modal-pills">'
-    + '<span class="pill">' + gz.year.ganzhi + '年（' + gz.year.sx + '）</span>'
-    + '<span class="pill">' + gz.month.ganzhi + '月</span>'
-    + '<span class="pill">' + gz.day.ganzhi + '日</span>'
-    + '</div></div>';
-
-  var bodyHtml = '';
-  if (rec && !editing) {
-    bodyHtml = '<div class="record-row" style="margin-bottom:14px">'
-      + '<span class="big-emoji">' + EMOJIS[score] + '</span>'
-      + '<div><div class="record-score" style="color:' + scoreColor(score) + '">' + score + ' 分</div>'
-      + '<div class="record-sub">' + LABELS[score] + '</div></div>'
-      + '</div>'
-      + (note ? '<div class="note-display">' + esc(note) + '</div>' : '')
-      + '<div class="btn-row">'
-      + '<button class="btn-outline" id="d-edit">修改</button>'
-      + '<button class="btn-ghost" id="d-del">删除</button>'
-      + '</div>';
-  } else {
-    bodyHtml = '<div class="score-form-top">'
-      + '<span class="score-emoji" id="d-emoji">' + EMOJIS[score] + '</span>'
-      + '<span class="score-number" id="d-num" style="color:' + scoreColor(score) + '">' + score + '</span>'
-      + '<span class="score-word" id="d-word">' + LABELS[score] + '</span>'
-      + '</div>'
-      + '<input type="range" id="d-slider" class="score-slider" min="1" max="10" value="' + score + '">'
-      + '<div class="slider-labels"><span>至暗</span><span class="gold">极致</span></div>'
-      + '<textarea id="d-note" class="note-input" placeholder="记录这天的感受（选填）" maxlength="300">' + esc(note) + '</textarea>'
-      + '<div class="btn-row">'
-      + '<button class="btn-primary" id="d-save">保存</button>'
-      + '<button class="btn-ghost" id="d-cancel">取消</button>'
-      + '</div>';
   }
 
-  document.getElementById('modal-content').innerHTML = headerHtml + bodyHtml;
-
-  var dSlider = document.getElementById('d-slider');
-  if (dSlider) {
-    dSlider.addEventListener('input', function() {
-      var s = +this.value;
-      var emoji = document.getElementById('d-emoji');
-      if (emoji) { emoji.textContent = EMOJIS[s]; emoji.classList.add('pop'); setTimeout(function(){ emoji.classList.remove('pop'); }, 150); }
-      var num = document.getElementById('d-num');
-      if (num) { num.textContent = s; num.style.color = scoreColor(s); }
-      var word = document.getElementById('d-word');
-      if (word) word.textContent = LABELS[s];
-    });
+  function updateBadge() {
+    var c = Storage.getUrgentCount();
+    var b = document.getElementById('bell-badge');
+    if (c>0) { b.textContent = c>99?'99+':c; b.classList.remove('hidden'); }
+    else b.classList.add('hidden');
   }
 
-  var dSave = document.getElementById('d-save');
-  if (dSave) dSave.addEventListener('click', function() {
-    var s = +(document.getElementById('d-slider').value);
-    var n = document.getElementById('d-note').value;
-    Storage.saveRecord(dateStr, s, n);
-    STATE.detailEditing = false;
-    showToast('已保存 ✓');
-    renderDetail();
-  });
+  // ── HOME VIEW (Dashboard) ────────────────────────────
+  function renderHome() {
+    var el = document.getElementById('view-home');
+    var items = Storage.getActiveItems();
+    var settings = Storage.getSettings();
+    var stats = Storage.getCategoryStats();
+    var cats = Storage.getVisibleCategories();
 
-  var dEdit = document.getElementById('d-edit');
-  if (dEdit) dEdit.addEventListener('click', function() { STATE.detailEditing = true; renderDetail(); });
+    var totalQty = 0;
+    items.forEach(function(it){ totalQty += it.quantity; });
 
-  var dCancel = document.getElementById('d-cancel');
-  if (dCancel) dCancel.addEventListener('click', function() {
-    if (rec) { STATE.detailEditing = false; renderDetail(); }
-    else hideDetail();
-  });
-
-  var dDel = document.getElementById('d-del');
-  if (dDel) dDel.addEventListener('click', function() {
-    if (confirm('确定删除这天的记录？')) {
-      Storage.deleteRecord(dateStr);
-      hideDetail();
-    }
-  });
-}
-
-// ── 启动 ───────────────────────────────────────────────────
-// 脚本在 body 末尾，DOM 已就绪，直接初始化，无需等 DOMContentLoaded
-(function init() {
-  try {
-    // Tab 点击（pointer-events:none 已加到 SVG，点击会冒泡到 button）
-    document.querySelectorAll('.tab-btn').forEach(function(btn) {
-      btn.addEventListener('click', function() { switchTab(btn.dataset.tab); });
+    var urgentItems = [];
+    items.forEach(function(it) {
+      var d = Storage.daysUntilExpiry(it);
+      it._days = d;
+      if (d <= settings.reminderDays) urgentItems.push(it);
     });
+    urgentItems.sort(function(a,b){ return a._days - b._days; });
 
-    // 点遮罩关闭弹窗
-    document.getElementById('modal-overlay').addEventListener('click', function(e) {
-      if (e.target.id === 'modal-overlay') hideDetail();
-    });
+    var expired = urgentItems.filter(function(it){ return it._days < 0; });
+    var greeting = GREETINGS[Math.floor(Math.random()*GREETINGS.length)];
 
-    // 首屏渲染
-    renderToday();
+    var html = '';
 
-    // Service Worker（需 HTTPS 或 localhost）
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(function(){});
+    // Greeting
+    html += '<div class="greeting-card">'
+      +'<div class="greeting-text">'+greeting+'</div>'
+      +'<div class="greeting-stats">'
+      +'<div><div class="greeting-stat-num">'+totalQty+'</div><div class="greeting-stat-label">件物品在管</div></div>'
+      +'<div><div class="greeting-stat-num">'+urgentItems.length+'</div><div class="greeting-stat-label">件需要注意</div></div>'
+      +'</div></div>';
+
+    // Alert
+    if (expired.length > 0) {
+      html += '<div class="alert-banner"><div class="alert-icon">⚠️</div><div class="alert-text">'
+        +'<div class="alert-title">'+expired.length+' 件物品已过期！</div>'
+        +'<div class="alert-sub">请尽快处理，避免浪费</div></div></div>';
     }
 
-  } catch(err) {
-    // 把错误显示在页面上，方便调试
-    var errDiv = document.createElement('div');
-    errDiv.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:#1a1a2e;color:#e05c5c;padding:40px;font-size:14px;z-index:9999;overflow:auto;white-space:pre-wrap';
-    errDiv.textContent = '初始化错误:\n' + err.message + '\n\n' + (err.stack || '');
-    document.body.appendChild(errDiv);
+    if (items.length === 0) {
+      html += '<div class="empty-state"><div class="empty-icon">🏝️</div>'
+        +'<div class="empty-title">欢迎来到保质岛！</div>'
+        +'<div class="empty-sub">点击下方 + 开始添加物品</div>'
+        +'<button class="empty-btn" id="home-add-btn">添加第一件物品</button></div>';
+    } else {
+      // Dashboard grid
+      html += '<div class="section-header"><span class="section-icon">📊</span><span class="section-title">我的囤货</span></div>';
+
+      // Total card
+      html += '<div class="dash-total"><div class="dash-total-left"><span class="dash-total-icon">📦</span>'
+        +'<span class="dash-total-label">全部物品</span></div><div class="dash-total-num">'+totalQty+'</div></div>';
+
+      // Category cards
+      var catsWithItems = cats.filter(function(c){ return stats[c.id] && stats[c.id] > 0; });
+
+      if (catsWithItems.length > 0) {
+        html += '<div class="dash-grid">';
+        catsWithItems.forEach(function(cat) {
+          var count = stats[cat.id] || 0;
+          var catUrgent = items.filter(function(it){ return it.categoryId===cat.id && it._days <= settings.reminderDays; }).length;
+          html += '<div class="dash-card'+(catUrgent>0?' has-urgent':'')+'" data-cat="'+cat.id+'" style="border-top:3px solid '+cat.color+'">'
+            +'<div class="dash-card-icon">'+cat.icon+'</div>'
+            +'<div class="dash-card-name">'+esc(cat.name)+'</div>'
+            +'<div class="dash-card-count">'+count+'</div>'
+            +'<div class="dash-card-unit">件</div>'
+            +'</div>';
+        });
+        html += '</div>';
+      }
+
+      // Urgent items
+      if (urgentItems.length > 0) {
+        var fifoIds = Storage.getFIFOItems(items);
+        html += '<div class="section-header"><span class="section-icon">⚡</span><span class="section-title">需要注意</span>'
+          +'<span class="section-count danger">'+urgentItems.length+'</span></div>';
+        urgentItems.slice(0,8).forEach(function(item) {
+          html += renderItemCard(item, fifoIds);
+        });
+        if (urgentItems.length > 8) {
+          html += '<div style="text-align:center;padding:8px;color:var(--text-dim);font-size:13px">还有 '+(urgentItems.length-8)+' 件...</div>';
+        }
+      }
+
+      // FIFO section
+      var fifoIds2 = Storage.getFIFOItems(items);
+      var fifoItems = items.filter(function(it){ return fifoIds2[it.id]; });
+      if (fifoItems.length > 0 && settings.showFIFO) {
+        fifoItems.sort(function(a,b){ return a._days - b._days; });
+        html += '<div class="fifo-section"><div class="section-header"><span class="section-icon">🍃</span><span class="section-title">先用这些 (FIFO)</span></div>';
+        fifoItems.slice(0,5).forEach(function(item){ html += renderItemCard(item, fifoIds2); });
+        html += '</div>';
+      }
+    }
+
+    el.innerHTML = html;
+
+    // Events
+    el.querySelectorAll('.dash-card').forEach(function(card){
+      card.addEventListener('click', function(){ drillToCategory(card.dataset.cat); });
+    });
+    el.querySelectorAll('.item-card').forEach(function(card){
+      card.addEventListener('click', function(){ showDetail(card.dataset.id); });
+    });
+    var addBtn = document.getElementById('home-add-btn');
+    if (addBtn) addBtn.addEventListener('click', function(){ switchTab('add'); });
   }
+
+  function renderItemCard(item, fifoIds) {
+    var cat = Storage.catById(item.categoryId);
+    var loc = Storage.locById(item.locationId);
+    var sub = Storage.subById(item.categoryId, item.subcategoryId);
+    var days = item._days !== undefined ? item._days : Storage.daysUntilExpiry(item);
+    var status = Storage.statusClass(days);
+    var isFifo = fifoIds && fifoIds[item.id];
+
+    var dd, dl;
+    if (days<0){ dd=Math.abs(days); dl='天已过期'; }
+    else if (days===0){ dd='!'; dl='今天到期'; }
+    else if (days===Infinity){ dd='∞'; dl='无期限'; }
+    else { dd=days; dl='天后到期'; }
+
+    return '<div class="item-card '+(status==='expired'||status==='danger'?status:'')+(status==='warning'?' urgent':'')+'" data-id="'+item.id+'">'
+      +'<div class="item-cat-icon" style="background:'+cat.color+'">'+cat.icon+'</div>'
+      +'<div class="item-info"><div class="item-name-row">'
+      +'<span class="item-name">'+esc(item.name)+'</span>'
+      +(isFifo?'<span class="fifo-badge">先用!</span>':'')
+      +(item.opened?'<span class="opened-badge">已开封</span>':'')
+      +(sub?'<span class="sub-badge">'+esc(sub.name)+'</span>':'')
+      +'</div><div class="item-meta">'
+      +'<span>'+loc.icon+' '+loc.name+'</span>'
+      +(item.quantity>1?'<span>'+item.quantity+item.unit+'</span>':'')
+      +'</div></div>'
+      +'<div class="item-right"><div class="item-days '+status+'">'+dd+'</div>'
+      +'<div class="item-days-label">'+dl+'</div></div></div>';
+  }
+
+  // ── INVENTORY VIEW ────────────────────────────────────
+  function renderInventory() {
+    var el = document.getElementById('view-inventory');
+    var items = Storage.getActiveItems();
+    var fifoIds = Storage.getFIFOItems(items);
+    var drillCat = STATE.drillCategory;
+    var search = STATE.invSearch.trim().toLowerCase();
+
+    items.forEach(function(it){ it._days = Storage.daysUntilExpiry(it); });
+    items.sort(function(a,b){ return a._days - b._days; });
+
+    if (drillCat) items = items.filter(function(it){ return it.categoryId === drillCat; });
+    if (search) items = items.filter(function(it){ return it.name.toLowerCase().indexOf(search)>=0; });
+
+    var html = '';
+
+    // Back button if drilled
+    if (drillCat) {
+      var dCat = Storage.catById(drillCat);
+      html += '<div class="inv-back" id="inv-back">← 返回首页 / '+dCat.icon+' '+esc(dCat.name)+' ('+items.length+'件)</div>';
+    }
+
+    // Search
+    html += '<div class="search-bar"><span class="search-icon">🔍</span>'
+      +'<input type="text" class="search-input" id="inv-search" placeholder="搜索物品名称..." value="'+esc(STATE.invSearch)+'"></div>';
+
+    // Filters (only show if not drilled into specific category)
+    if (!drillCat) {
+      var f = STATE.invFilter;
+      var consumedCount = Storage.getConsumedItems().length;
+      html += '<div class="inv-filter-bar">'
+        +'<div class="filter-chip'+(f==='all'?' active':'')+'" data-filter="all">全部</div>'
+        +'<div class="filter-chip'+(f==='location'?' active':'')+'" data-filter="location">按位置</div>'
+        +'<div class="filter-chip'+(f==='category'?' active':'')+'" data-filter="category">按分类</div>'
+        +'<div class="filter-chip'+(f==='consumed'?' active':'')+'" data-filter="consumed">已消耗'+(consumedCount>0?' ('+consumedCount+')':'')+'</div>'
+        +'</div>';
+    } else {
+      // Show subcategory filter if this category has subcategories
+      var subs = Storage.getSubcategories(drillCat);
+      if (subs.length > 0) {
+        var sf = STATE.invSubFilter || 'all';
+        html += '<div class="inv-filter-bar">'
+          +'<div class="filter-chip'+(sf==='all'?' active':'')+'" data-subfilter="all">全部</div>';
+        subs.forEach(function(sub){
+          html += '<div class="filter-chip'+(sf===sub.id?' active':'')+'" data-subfilter="'+sub.id+'">'+esc(sub.name)+'</div>';
+        });
+        html += '<div class="filter-chip" data-subfilter="none">未分类</div></div>';
+
+        if (sf !== 'all') {
+          if (sf === 'none') items = items.filter(function(it){ return !it.subcategoryId; });
+          else items = items.filter(function(it){ return it.subcategoryId === sf; });
+        }
+      }
+    }
+
+    if (!drillCat && STATE.invFilter === 'consumed') {
+      var consumed = Storage.getConsumedItems();
+      if (search) consumed = consumed.filter(function(it){ return it.name.toLowerCase().indexOf(search)>=0; });
+      consumed.sort(function(a,b){ return (b.usedAt||0) - (a.usedAt||0); });
+      if (consumed.length === 0) {
+        html += '<div class="empty-state"><div class="empty-icon">✨</div>'
+          +'<div class="empty-title">暂无已消耗物品</div>'
+          +'<div class="empty-sub">消耗的物品会出现在这里</div></div>';
+      } else {
+        consumed.forEach(function(ci){
+          var cat = Storage.catById(ci.categoryId);
+          var loc = Storage.locById(ci.locationId);
+          var usedDate = ci.usedAt ? new Date(ci.usedAt) : null;
+          var usedStr = usedDate ? usedDate.getFullYear()+'-'+String(usedDate.getMonth()+1).padStart(2,'0')+'-'+String(usedDate.getDate()).padStart(2,'0') : '';
+          html += '<div class="item-card consumed-card" data-cid="'+ci.id+'">'
+            +'<div class="item-cat-icon" style="background:'+cat.color+';opacity:0.6">'+cat.icon+'</div>'
+            +'<div class="item-info"><div class="item-name-row">'
+            +'<span class="item-name" style="opacity:0.7">'+esc(ci.name)+'</span>'
+            +'<span class="consumed-badge">已消耗</span></div>'
+            +'<div class="item-meta"><span>'+loc.icon+' '+loc.name+'</span>'
+            +(ci._origQty?'<span>原'+ci._origQty+ci.unit+'</span>':'')
+            +'<span>消耗于 '+usedStr+'</span></div></div>'
+            +'<button class="btn-restore" data-rid="'+ci.id+'">恢复</button></div>';
+        });
+      }
+    } else if (items.length === 0) {
+      html += '<div class="empty-state"><div class="empty-icon">📭</div>'
+        +'<div class="empty-title">'+(search?'没有找到匹配的物品':'暂无物品')+'</div>'
+        +'<div class="empty-sub">'+(search?'试试其他关键词':'点击 + 添加物品')+'</div></div>';
+    } else if (!drillCat && STATE.invFilter === 'location') {
+      var locG = {};
+      items.forEach(function(it){ if(!locG[it.locationId]) locG[it.locationId]=[]; locG[it.locationId].push(it); });
+      Storage.getVisibleLocations().forEach(function(loc){
+        var g = locG[loc.id]; if(!g||!g.length) return;
+        html += '<div class="inv-group-header"><span class="inv-group-icon">'+loc.icon+'</span><span>'+loc.name+'</span><span class="inv-group-count">'+g.length+'件</span></div>';
+        g.forEach(function(item){ html += renderItemCard(item, fifoIds); });
+      });
+    } else if (!drillCat && STATE.invFilter === 'category') {
+      var catG = {};
+      items.forEach(function(it){ if(!catG[it.categoryId]) catG[it.categoryId]=[]; catG[it.categoryId].push(it); });
+      Storage.getVisibleCategories().forEach(function(cat){
+        var g = catG[cat.id]; if(!g||!g.length) return;
+        html += '<div class="inv-group-header"><span class="inv-group-icon">'+cat.icon+'</span><span>'+cat.name+'</span><span class="inv-group-count">'+g.length+'件</span></div>';
+        g.forEach(function(item){ html += renderItemCard(item, fifoIds); });
+      });
+    } else {
+      items.forEach(function(item){ html += renderItemCard(item, fifoIds); });
+    }
+
+    el.innerHTML = html;
+
+    // Events
+    var back = document.getElementById('inv-back');
+    if (back) back.addEventListener('click', function(){ STATE.drillCategory=null; switchTab('home'); });
+
+    el.querySelectorAll('.filter-chip[data-filter]').forEach(function(chip){
+      chip.addEventListener('click', function(){ STATE.invFilter=chip.dataset.filter; renderInventory(); });
+    });
+    el.querySelectorAll('.filter-chip[data-subfilter]').forEach(function(chip){
+      chip.addEventListener('click', function(){ STATE.invSubFilter=chip.dataset.subfilter; renderInventory(); });
+    });
+
+    var si = document.getElementById('inv-search');
+    if (si) { si.addEventListener('input', function(){ STATE.invSearch=this.value; renderInventory(); }); if(STATE.invSearch) si.focus(); }
+
+    el.querySelectorAll('.item-card:not(.consumed-card)').forEach(function(card){
+      card.addEventListener('click', function(){ showDetail(card.dataset.id); });
+    });
+    el.querySelectorAll('.consumed-card').forEach(function(card){
+      card.addEventListener('click', function(e){
+        if (e.target.classList.contains('btn-restore')) return;
+        showConsumedDetail(card.dataset.cid);
+      });
+    });
+    el.querySelectorAll('.btn-restore').forEach(function(btn){
+      btn.addEventListener('click', function(e){
+        e.stopPropagation();
+        showConfirm('确认恢复此物品？','🔄',function(){
+          Storage.restoreItem(btn.dataset.rid);
+          showToast('已恢复 ✓');
+          renderInventory();
+        });
+      });
+    });
+  }
+
+  // ── ADD / EDIT VIEW ───────────────────────────────────
+  function renderAdd(editItem) {
+    var el = document.getElementById('view-add');
+    var item = editItem || null;
+    var isEdit = !!item;
+    var cats = Storage.getVisibleCategories();
+    var locs = Storage.getVisibleLocations();
+    var selCat = item ? item.categoryId : (cats[0]?cats[0].id:'other');
+    var selSub = item ? item.subcategoryId : null;
+
+    var html = '<div class="form-title">'+(isEdit?'编辑物品':'添加新物品')+'</div>';
+
+    // Name
+    html += '<div class="form-group"><label class="form-label">物品名称 *</label>'
+      +'<input type="text" class="form-input" id="add-name" placeholder="例如：纯牛奶" value="'+esc(item?item.name:'')+'" maxlength="50"></div>';
+
+    // Category
+    html += '<div class="form-group"><label class="form-label"><span>分类</span><span class="form-label-link" id="manage-cats-link">管理分类 ›</span></label>'
+      +'<div class="selector-grid" id="add-cat-grid">';
+    cats.forEach(function(cat){
+      html += '<div class="selector-item'+(selCat===cat.id?' active':'')+'" data-cat="'+cat.id+'">'
+        +'<span class="selector-item-icon">'+cat.icon+'</span>'
+        +'<span class="selector-item-name">'+esc(cat.name)+'</span></div>';
+    });
+    html += '</div>';
+
+    // Subcategory chips
+    var subs = Storage.getSubcategories(selCat);
+    if (subs.length > 0) {
+      html += '<div class="sub-chips" id="add-sub-chips">'
+        +'<div class="sub-chip'+(selSub===null?' active':'')+'" data-sub="">不选子类</div>';
+      subs.forEach(function(sub){
+        html += '<div class="sub-chip'+(selSub===sub.id?' active':'')+'" data-sub="'+sub.id+'">'+esc(sub.name)+'</div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+
+    // Location
+    html += '<div class="form-group"><label class="form-label"><span>存放位置</span><span class="form-label-link" id="manage-locs-link">管理位置 ›</span></label>'
+      +'<div class="selector-grid" id="add-loc-grid">';
+    var selLoc = item ? item.locationId : (locs[0]?locs[0].id:'other');
+    locs.forEach(function(loc){
+      html += '<div class="selector-item'+(selLoc===loc.id?' active':'')+'" data-loc="'+loc.id+'">'
+        +'<span class="selector-item-icon">'+loc.icon+'</span>'
+        +'<span class="selector-item-name">'+esc(loc.name)+'</span></div>';
+    });
+    html += '</div></div>';
+
+    // Dates
+    html += '<div class="form-row"><div class="form-group"><label class="form-label">生产日期</label>'
+      +'<input type="date" class="form-input" id="add-purchase" value="'+(item?item.purchaseDate:today())+'"></div>'
+      +'<div class="form-group"><label class="form-label">保质期至 *</label>'
+      +'<input type="date" class="form-input" id="add-expiry" value="'+(item?item.expiryDate:'')+'"></div></div>';
+
+    // Quantity
+    html += '<div class="form-row"><div class="form-group"><label class="form-label">数量</label>'
+      +'<input type="number" class="form-input" id="add-qty" min="1" max="9999" value="'+(item?item.quantity:1)+'"></div>'
+      +'<div class="form-group"><label class="form-label">单位</label><select class="form-input" id="add-unit">';
+    UNITS.forEach(function(u){
+      html += '<option value="'+u+'"'+((item&&item.unit===u)||(!item&&u==='个')?' selected':'')+'>'+u+'</option>';
+    });
+    html += '</select></div></div>';
+
+    // After opening
+    html += '<div class="form-group"><label class="form-label">开封后保质天数（选填）</label>'
+      +'<input type="number" class="form-input" id="add-afteropen" placeholder="例如：7 天" min="1" max="365" value="'+(item&&item.afterOpeningDays?item.afterOpeningDays:'')+'"></div>';
+
+    // Notes
+    html += '<div class="form-group"><label class="form-label">备注（选填）</label>'
+      +'<textarea class="form-textarea" id="add-notes" placeholder="例如：买二送一活动" maxlength="200">'+esc(item?item.notes:'')+'</textarea></div>';
+
+    html += '<button class="form-btn-primary" id="add-save">'+(isEdit?'保存修改 🍃':'添加到保质岛 🍃')+'</button>';
+    if (isEdit) html += '<button class="form-btn-secondary" id="add-cancel">取消编辑</button>';
+
+    el.innerHTML = html;
+
+    // Category selection with subcategory refresh
+    el.querySelectorAll('#add-cat-grid .selector-item').forEach(function(si){
+      si.addEventListener('click', function(){
+        el.querySelectorAll('#add-cat-grid .selector-item').forEach(function(s){ s.classList.remove('active'); });
+        si.classList.add('active');
+        refreshSubChips(el, si.dataset.cat);
+      });
+    });
+
+    // Subcategory selection
+    bindSubChips(el);
+
+    // Location selection
+    el.querySelectorAll('#add-loc-grid .selector-item').forEach(function(si){
+      si.addEventListener('click', function(){
+        el.querySelectorAll('#add-loc-grid .selector-item').forEach(function(s){ s.classList.remove('active'); });
+        si.classList.add('active');
+      });
+    });
+
+    // Manage links
+    document.getElementById('manage-cats-link').addEventListener('click', function(){ showManageCategories(); });
+    document.getElementById('manage-locs-link').addEventListener('click', function(){ showManageLocations(); });
+
+    // Save
+    document.getElementById('add-save').addEventListener('click', function(){
+      var name = document.getElementById('add-name').value.trim();
+      if (!name) { showToast('请输入物品名称'); return; }
+      var expiry = document.getElementById('add-expiry').value;
+      if (!expiry) { showToast('请选择保质期'); return; }
+
+      var catEl = el.querySelector('#add-cat-grid .selector-item.active');
+      var locEl = el.querySelector('#add-loc-grid .selector-item.active');
+      var subEl = el.querySelector('#add-sub-chips .sub-chip.active');
+      var ao = document.getElementById('add-afteropen').value;
+
+      var data = {
+        name: name,
+        categoryId: catEl?catEl.dataset.cat:'other',
+        subcategoryId: subEl&&subEl.dataset.sub?subEl.dataset.sub:null,
+        locationId: locEl?locEl.dataset.loc:'other',
+        purchaseDate: document.getElementById('add-purchase').value || today(),
+        expiryDate: expiry,
+        quantity: parseInt(document.getElementById('add-qty').value)||1,
+        unit: document.getElementById('add-unit').value||'个',
+        afterOpeningDays: ao?parseInt(ao):null,
+        notes: document.getElementById('add-notes').value.trim()
+      };
+
+      if (isEdit && STATE.editingId) {
+        Storage.updateItem(STATE.editingId, data);
+        STATE.editingId = null;
+        showToast('修改成功 ✓');
+        switchTab('inventory');
+      } else {
+        Storage.addItem(data);
+        showToast('添加成功 🍃');
+        renderAdd();
+      }
+    });
+
+    var cancelBtn = document.getElementById('add-cancel');
+    if (cancelBtn) cancelBtn.addEventListener('click', function(){ STATE.editingId=null; switchTab('inventory'); });
+  }
+
+  function refreshSubChips(el, catId) {
+    var oldChips = document.getElementById('add-sub-chips');
+    if (oldChips) oldChips.remove();
+    var subs = Storage.getSubcategories(catId);
+    if (subs.length === 0) return;
+    var container = document.createElement('div');
+    container.className = 'sub-chips'; container.id = 'add-sub-chips';
+    container.innerHTML = '<div class="sub-chip active" data-sub="">不选子类</div>'
+      + subs.map(function(s){ return '<div class="sub-chip" data-sub="'+s.id+'">'+esc(s.name)+'</div>'; }).join('');
+    var catGrid = document.getElementById('add-cat-grid');
+    catGrid.parentNode.insertBefore(container, catGrid.nextSibling);
+    bindSubChips(el);
+  }
+
+  function bindSubChips(el) {
+    var chips = el.querySelectorAll('#add-sub-chips .sub-chip');
+    chips.forEach(function(chip){
+      chip.addEventListener('click', function(){
+        chips.forEach(function(c){ c.classList.remove('active'); });
+        chip.classList.add('active');
+      });
+    });
+  }
+
+  // ── DETAIL MODAL ──────────────────────────────────────
+  function showDetail(itemId) {
+    var item = Storage.getItem(itemId);
+    if (!item) return;
+    var cat = Storage.catById(item.categoryId);
+    var loc = Storage.locById(item.locationId);
+    var sub = Storage.subById(item.categoryId, item.subcategoryId);
+    var days = Storage.daysUntilExpiry(item);
+    var status = Storage.statusClass(days);
+    var fifoIds = Storage.getFIFOItems(Storage.getActiveItems());
+
+    var html = '<div class="detail-header">'
+      +'<div class="detail-cat-icon" style="background:'+cat.color+'">'+cat.icon+'</div>'
+      +'<div class="detail-name">'+esc(item.name)+'</div>'
+      +(sub?'<span class="sub-badge" style="display:inline-block;margin-top:6px">'+esc(sub.name)+'</span>':'')
+      +(fifoIds[item.id]?'<span class="fifo-badge" style="display:inline-block;margin-top:6px">FIFO 先用这个!</span>':'')
+      +'</div>';
+
+    if (days !== Infinity) {
+      var sLabel = days<0?'已过期 '+Math.abs(days)+' 天':days===0?'今天到期！':'距离到期';
+      html += '<div class="detail-status '+status+'">'
+        +'<div class="detail-status-days">'+(days<0?'已过期':days===0?'今天!':days+' 天')+'</div>'
+        +'<div class="detail-status-label">'+sLabel+'</div></div>';
+    }
+
+    html += '<div class="detail-info-grid">'
+      +'<div class="detail-info-item"><div class="detail-info-label">分类</div><div class="detail-info-value">'+cat.icon+' '+cat.name+'</div></div>'
+      +'<div class="detail-info-item"><div class="detail-info-label">存放位置</div><div class="detail-info-value">'+loc.icon+' '+loc.name+'</div></div>'
+      +'<div class="detail-info-item"><div class="detail-info-label">生产日期</div><div class="detail-info-value">'+(item.purchaseDate||'-')+'</div></div>'
+      +'<div class="detail-info-item"><div class="detail-info-label">到期日期</div><div class="detail-info-value">'+(item.expiryDate||'-')+'</div></div>'
+      +'<div class="detail-info-item"><div class="detail-info-label">数量</div><div class="detail-info-value">'+item.quantity+' '+item.unit+'</div></div>'
+      +'<div class="detail-info-item"><div class="detail-info-label">状态</div><div class="detail-info-value">'+(item.opened?'已开封':'未开封')+'</div></div>'
+      +'</div>';
+
+    if (item.afterOpeningDays) {
+      html += '<div class="detail-info-grid" style="grid-template-columns:1fr">'
+        +'<div class="detail-info-item"><div class="detail-info-label">开封后保质</div><div class="detail-info-value">'
+        +item.afterOpeningDays+' 天'+(item.opened&&item.openedDate?' （'+item.openedDate+' 开封）':'')+'</div></div></div>';
+    }
+    if (item.notes) {
+      html += '<div class="detail-info-grid" style="grid-template-columns:1fr">'
+        +'<div class="detail-info-item"><div class="detail-info-label">备注</div><div class="detail-info-value">'+esc(item.notes)+'</div></div></div>';
+    }
+
+    html += '<div class="detail-btns">';
+    if (!item.opened && item.afterOpeningDays)
+      html += '<button class="btn-use" id="detail-open" style="background:var(--sky)">标记开封</button>';
+    if (item.quantity > 1)
+      html += '<button class="btn-use" id="detail-consume1" style="background:var(--sky)">消耗1'+item.unit+'</button>';
+    html += '<button class="btn-use" id="detail-use">'+(item.quantity>1?'全部消耗':'已使用')+'</button>'
+      +'<button class="btn-edit" id="detail-edit">编辑</button></div>'
+      +'<div class="detail-btns" style="margin-top:8px"><button class="btn-delete" id="detail-delete">删除物品</button></div>';
+
+    document.getElementById('modal-content').innerHTML = html;
+    document.getElementById('modal-overlay').classList.remove('hidden');
+
+    var openBtn = document.getElementById('detail-open');
+    if (openBtn) openBtn.onclick = function(){
+      Storage.updateItem(itemId, { opened:true, openedDate:today() });
+      showToast('已标记开封 📦'); hideModal(); render();
+    };
+    var consume1Btn = document.getElementById('detail-consume1');
+    if (consume1Btn) consume1Btn.onclick = function(){
+      Storage.consumeOne(itemId);
+      var updated = Storage.getItem(itemId);
+      if (updated && updated.quantity === 0) {
+        showToast('最后1个已消耗 🎉'); hideModal();
+      } else {
+        showToast('已消耗1'+item.unit+' ✓'); showDetail(itemId);
+      }
+      render();
+    };
+    document.getElementById('detail-use').onclick = function(){
+      showConfirm('确认'+(item.quantity>1?'全部':'')+'消耗？','✅',function(){ Storage.markUsed(itemId); showToast('太棒了 🎉'); hideModal(); render(); });
+    };
+    document.getElementById('detail-edit').onclick = function(){
+      STATE.editingId = itemId; hideModal(); switchTab('add'); renderAdd(item);
+    };
+    document.getElementById('detail-delete').onclick = function(){
+      showConfirm('确定要删除？','🗑️',function(){ Storage.deleteItem(itemId); showToast('已删除'); hideModal(); render(); },true);
+    };
+  }
+
+  function showConsumedDetail(itemId) {
+    var item = Storage.getItem(itemId);
+    if (!item) return;
+    var cat = Storage.catById(item.categoryId);
+    var loc = Storage.locById(item.locationId);
+    var sub = Storage.subById(item.categoryId, item.subcategoryId);
+    var usedDate = item.usedAt ? new Date(item.usedAt) : null;
+    var usedStr = usedDate ? usedDate.getFullYear()+'-'+String(usedDate.getMonth()+1).padStart(2,'0')+'-'+String(usedDate.getDate()).padStart(2,'0') : '';
+
+    var html = '<div class="detail-header">'
+      +'<div class="detail-cat-icon" style="background:'+cat.color+';opacity:0.6">'+cat.icon+'</div>'
+      +'<div class="detail-name" style="opacity:0.7">'+esc(item.name)+'</div>'
+      +(sub?'<span class="sub-badge" style="display:inline-block;margin-top:6px">'+esc(sub.name)+'</span>':'')
+      +'<span class="consumed-badge" style="display:inline-block;margin-top:6px">已消耗</span>'
+      +'</div>';
+
+    html += '<div class="detail-info-grid">'
+      +'<div class="detail-info-item"><div class="detail-info-label">分类</div><div class="detail-info-value">'+cat.icon+' '+cat.name+'</div></div>'
+      +'<div class="detail-info-item"><div class="detail-info-label">存放位置</div><div class="detail-info-value">'+loc.icon+' '+loc.name+'</div></div>'
+      +'<div class="detail-info-item"><div class="detail-info-label">生产日期</div><div class="detail-info-value">'+(item.purchaseDate||'-')+'</div></div>'
+      +'<div class="detail-info-item"><div class="detail-info-label">到期日期</div><div class="detail-info-value">'+(item.expiryDate||'-')+'</div></div>'
+      +'<div class="detail-info-item"><div class="detail-info-label">原数量</div><div class="detail-info-value">'+(item._origQty||item.quantity)+' '+item.unit+'</div></div>'
+      +'<div class="detail-info-item"><div class="detail-info-label">消耗日期</div><div class="detail-info-value">'+usedStr+'</div></div>'
+      +'</div>';
+
+    if (item.notes) {
+      html += '<div class="detail-info-grid" style="grid-template-columns:1fr">'
+        +'<div class="detail-info-item"><div class="detail-info-label">备注</div><div class="detail-info-value">'+esc(item.notes)+'</div></div></div>';
+    }
+
+    html += '<div class="detail-btns">'
+      +'<button class="btn-use" id="cd-restore" style="background:var(--sky)">🔄 恢复物品</button>'
+      +'<button class="btn-delete" id="cd-delete">删除记录</button></div>';
+
+    document.getElementById('modal-content').innerHTML = html;
+    document.getElementById('modal-overlay').classList.remove('hidden');
+
+    document.getElementById('cd-restore').onclick = function(){
+      showConfirm('确认恢复此物品？','🔄',function(){
+        Storage.restoreItem(itemId);
+        showToast('已恢复 ✓'); hideModal(); render();
+      });
+    };
+    document.getElementById('cd-delete').onclick = function(){
+      showConfirm('确定要永久删除？','🗑️',function(){
+        Storage.deleteItem(itemId); showToast('已删除'); hideModal(); render();
+      },true);
+    };
+  }
+
+  function hideModal() { document.getElementById('modal-overlay').classList.add('hidden'); }
+
+  // ── MANAGE CATEGORIES MODAL ───────────────────────────
+  function showManageCategories() {
+    var mc = document.getElementById('modal-content');
+    mc.innerHTML = buildManageCatsHTML();
+    document.getElementById('modal-overlay').classList.remove('hidden');
+    bindManageCatsEvents();
+  }
+
+  function buildManageCatsHTML() {
+    var allCats = Storage.getAllCategories();
+    var html = '<div class="modal-title">管理物品分类</div>';
+
+    // Add new
+    html += '<div style="margin-bottom:16px">'
+      +'<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">'
+      +'<button class="emoji-picker-btn" id="mc-emoji-btn">📦</button>'
+      +'<input type="text" class="form-input" id="mc-name" placeholder="新分类名称" maxlength="20" style="flex:1">'
+      +'<button class="manage-btn primary" id="mc-add" style="width:auto;padding:0 16px;border-radius:var(--radius-xs);height:46px;font-size:13px;font-weight:600">添加</button>'
+      +'</div>'
+      +'<div class="emoji-grid hidden" id="mc-emoji-grid">';
+    EMOJI_PICKS.forEach(function(e){
+      html += '<button class="emoji-grid-item" data-emoji="'+e+'">'+e+'</button>';
+    });
+    html += '</div>'
+      +'<div class="color-grid" id="mc-color-grid">';
+    COLOR_PALETTE.forEach(function(c,i){
+      html += '<div class="color-swatch'+(i===0?' selected':'')+'" data-color="'+c+'" style="background:'+c+'"></div>';
+    });
+    html += '</div></div>';
+
+    // List
+    html += '<div class="manage-list">';
+    allCats.forEach(function(cat){
+      html += '<div class="manage-item'+(cat.hidden?' hidden-item':'')+'">'
+        +'<span class="manage-item-icon">'+cat.icon+'</span>'
+        +'<div style="flex:1"><div class="manage-item-name">'+esc(cat.name)+'</div>'
+        +'<div class="manage-item-sub">'+Storage.getSubcategories(cat.id).length+' 个子分类</div></div>';
+      if (cat.builtIn) {
+        html += '<button class="manage-btn" data-toggle="'+cat.id+'" title="'+(cat.hidden?'显示':'隐藏')+'">'+(cat.hidden?'👁':'🙈')+'</button>';
+      } else {
+        html += '<button class="manage-btn danger" data-delcat="'+cat.id+'" title="删除">✕</button>';
+      }
+      html += '<button class="manage-btn" data-mansub="'+cat.id+'" title="管理子分类">▸</button></div>';
+    });
+    html += '</div>';
+
+    return html;
+  }
+
+  function bindManageCatsEvents() {
+    var emojiBtn = document.getElementById('mc-emoji-btn');
+    var emojiGrid = document.getElementById('mc-emoji-grid');
+    var selectedEmoji = '📦';
+    var selectedColor = COLOR_PALETTE[0];
+
+    emojiBtn.addEventListener('click', function(){ emojiGrid.classList.toggle('hidden'); });
+    emojiGrid.querySelectorAll('.emoji-grid-item').forEach(function(item){
+      item.addEventListener('click', function(){
+        selectedEmoji = item.dataset.emoji;
+        emojiBtn.textContent = selectedEmoji;
+        emojiGrid.classList.add('hidden');
+      });
+    });
+
+    document.querySelectorAll('#mc-color-grid .color-swatch').forEach(function(sw){
+      sw.addEventListener('click', function(){
+        document.querySelectorAll('#mc-color-grid .color-swatch').forEach(function(s){ s.classList.remove('selected'); });
+        sw.classList.add('selected');
+        selectedColor = sw.dataset.color;
+      });
+    });
+
+    document.getElementById('mc-add').addEventListener('click', function(){
+      var name = document.getElementById('mc-name').value.trim();
+      if (!name) { showToast('请输入分类名称'); return; }
+      Storage.addCategory({ name:name, icon:selectedEmoji, color:selectedColor });
+      showToast('已添加 '+selectedEmoji+' '+name);
+      showManageCategories();
+    });
+
+    document.querySelectorAll('[data-toggle]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var id = btn.dataset.toggle;
+        var cat = Storage.getAllCategories().find(function(c){ return c.id===id; });
+        if (cat && cat.hidden) Storage.showCategory(id);
+        else Storage.hideCategory(id);
+        showManageCategories();
+      });
+    });
+
+    document.querySelectorAll('[data-delcat]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        showConfirm('删除此自定义分类？','🗑️',function(){
+          Storage.deleteCategory(btn.dataset.delcat);
+          showToast('已删除');
+          showManageCategories();
+        },true);
+      });
+    });
+
+    document.querySelectorAll('[data-mansub]').forEach(function(btn){
+      btn.addEventListener('click', function(){ showManageSubcategories(btn.dataset.mansub); });
+    });
+  }
+
+  // ── MANAGE SUBCATEGORIES ──────────────────────────────
+  function showManageSubcategories(catId) {
+    var cat = Storage.catById(catId);
+    var subs = Storage.getSubcategories(catId);
+    var mc = document.getElementById('modal-content');
+
+    var html = '<div class="modal-title">'+cat.icon+' '+esc(cat.name)+' 的子分类</div>';
+
+    html += '<div style="display:flex;gap:8px;margin-bottom:16px">'
+      +'<input type="text" class="form-input" id="ms-name" placeholder="新子分类名称" maxlength="20" style="flex:1">'
+      +'<button class="manage-btn primary" id="ms-add" style="width:auto;padding:0 16px;border-radius:var(--radius-xs);height:46px;font-size:13px;font-weight:600">添加</button>'
+      +'</div>';
+
+    if (subs.length === 0) {
+      html += '<div style="text-align:center;padding:24px;color:var(--text-dim);font-size:14px">暂无子分类</div>';
+    } else {
+      html += '<div class="manage-list">';
+      subs.forEach(function(sub){
+        html += '<div class="manage-item"><span class="manage-item-icon">·</span>'
+          +'<div class="manage-item-name">'+esc(sub.name)+'</div>'
+          +'<button class="manage-btn danger" data-delsub="'+sub.id+'">✕</button></div>';
+      });
+      html += '</div>';
+    }
+
+    html += '<button class="form-btn-secondary" id="ms-back">← 返回分类管理</button>';
+
+    mc.innerHTML = html;
+
+    document.getElementById('ms-add').addEventListener('click', function(){
+      var name = document.getElementById('ms-name').value.trim();
+      if (!name) { showToast('请输入子分类名称'); return; }
+      Storage.addSubcategory(catId, name);
+      showToast('已添加');
+      showManageSubcategories(catId);
+    });
+
+    document.querySelectorAll('[data-delsub]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        Storage.deleteSubcategory(catId, btn.dataset.delsub);
+        showToast('已删除');
+        showManageSubcategories(catId);
+      });
+    });
+
+    document.getElementById('ms-back').addEventListener('click', function(){ showManageCategories(); });
+  }
+
+  // ── MANAGE LOCATIONS MODAL ────────────────────────────
+  function showManageLocations() {
+    var allLocs = Storage.getAllLocations();
+    var mc = document.getElementById('modal-content');
+
+    var html = '<div class="modal-title">管理存放位置</div>';
+
+    html += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">'
+      +'<button class="emoji-picker-btn" id="ml-emoji-btn">📍</button>'
+      +'<input type="text" class="form-input" id="ml-name" placeholder="新位置名称" maxlength="20" style="flex:1">'
+      +'<button class="manage-btn primary" id="ml-add" style="width:auto;padding:0 16px;border-radius:var(--radius-xs);height:46px;font-size:13px;font-weight:600">添加</button>'
+      +'</div>'
+      +'<div class="emoji-grid hidden" id="ml-emoji-grid">';
+    EMOJI_PICKS.forEach(function(e){
+      html += '<button class="emoji-grid-item" data-emoji="'+e+'">'+e+'</button>';
+    });
+    html += '</div>';
+
+    html += '<div class="manage-list" style="margin-top:16px">';
+    allLocs.forEach(function(loc){
+      html += '<div class="manage-item'+(loc.hidden?' hidden-item':'')+'">'
+        +'<span class="manage-item-icon">'+loc.icon+'</span>'
+        +'<div class="manage-item-name" style="flex:1">'+esc(loc.name)+'</div>';
+      if (loc.builtIn) {
+        html += '<button class="manage-btn" data-ltoggle="'+loc.id+'">'+(loc.hidden?'👁':'🙈')+'</button>';
+      } else {
+        html += '<button class="manage-btn danger" data-delloc="'+loc.id+'">✕</button>';
+      }
+      html += '</div>';
+    });
+    html += '</div>';
+
+    mc.innerHTML = html;
+    document.getElementById('modal-overlay').classList.remove('hidden');
+
+    var emojiBtn = document.getElementById('ml-emoji-btn');
+    var emojiGrid = document.getElementById('ml-emoji-grid');
+    var selEmoji = '📍';
+
+    emojiBtn.addEventListener('click', function(){ emojiGrid.classList.toggle('hidden'); });
+    emojiGrid.querySelectorAll('.emoji-grid-item').forEach(function(item){
+      item.addEventListener('click', function(){
+        selEmoji = item.dataset.emoji;
+        emojiBtn.textContent = selEmoji;
+        emojiGrid.classList.add('hidden');
+      });
+    });
+
+    document.getElementById('ml-add').addEventListener('click', function(){
+      var name = document.getElementById('ml-name').value.trim();
+      if (!name) { showToast('请输入位置名称'); return; }
+      Storage.addLocation({ name:name, icon:selEmoji });
+      showToast('已添加 '+selEmoji+' '+name);
+      showManageLocations();
+    });
+
+    document.querySelectorAll('[data-ltoggle]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var id = btn.dataset.ltoggle;
+        var loc = Storage.getAllLocations().find(function(l){ return l.id===id; });
+        if (loc && loc.hidden) Storage.showLocation(id);
+        else Storage.hideLocation(id);
+        showManageLocations();
+      });
+    });
+
+    document.querySelectorAll('[data-delloc]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        showConfirm('删除此自定义位置？','🗑️',function(){
+          Storage.deleteLocation(btn.dataset.delloc);
+          showToast('已删除');
+          showManageLocations();
+        },true);
+      });
+    });
+  }
+
+  // ── SETTINGS VIEW ────────────────────────────────────
+  function renderSettings() {
+    var el = document.getElementById('view-settings');
+    var settings = Storage.getSettings();
+    var items = Storage.getAllItems();
+    var activeCount = items.filter(function(it){ return !it.usedAt; }).length;
+    var usedCount = items.filter(function(it){ return !!it.usedAt; }).length;
+
+    var html = '<div class="form-title">设置</div>';
+
+    // Stats
+    html += '<div class="settings-section"><div class="settings-section-title">数据统计</div>'
+      +'<div class="setting-item" style="cursor:default"><div><div class="setting-label">在管物品</div></div><div style="font-weight:600;color:var(--primary)">'+activeCount+' 件</div></div>'
+      +'<div class="setting-item" style="cursor:default"><div><div class="setting-label">已消耗物品</div></div><div style="font-weight:600;color:var(--text-dim)">'+usedCount+' 件</div></div>'
+      +'</div>';
+
+    // Category & Location management
+    html += '<div class="settings-section"><div class="settings-section-title">分类与位置</div>'
+      +'<div class="setting-item" id="set-manage-cats"><div><div class="setting-label">管理物品分类</div><div class="setting-desc">添加、隐藏分类和子分类</div></div><span class="setting-arrow">›</span></div>'
+      +'<div class="setting-item" id="set-manage-locs"><div><div class="setting-label">管理存放位置</div><div class="setting-desc">添加、隐藏存放位置</div></div><span class="setting-arrow">›</span></div>'
+      +'</div>';
+
+    // Reminder
+    html += '<div class="settings-section"><div class="settings-section-title">提醒设置</div>'
+      +'<div class="setting-item" style="cursor:default"><div><div class="setting-label">提前提醒天数</div><div class="setting-desc">首页显示即将到期物品</div></div>'
+      +'<select class="setting-select" id="set-remind">';
+    [1,2,3,5,7,14,30].forEach(function(d){
+      html += '<option value="'+d+'"'+(settings.reminderDays===d?' selected':'')+'>'+d+' 天</option>';
+    });
+    html += '</select></div>'
+      +'<div class="setting-item" style="cursor:default"><div><div class="setting-label">显示 FIFO 推荐</div><div class="setting-desc">首页显示先进先出推荐</div></div>'
+      +'<label class="toggle"><input type="checkbox" id="set-fifo"'+(settings.showFIFO?' checked':'')+'><span class="toggle-slider"></span></label></div>'
+      +'<div class="setting-item" style="cursor:default"><div><div class="setting-label">浏览器通知</div><div class="setting-desc">到期前推送提醒</div></div>'
+      +'<label class="toggle"><input type="checkbox" id="set-notif"'+(settings.notificationsEnabled?' checked':'')+'><span class="toggle-slider"></span></label></div>'
+      +'</div>';
+
+    // Data
+    html += '<div class="settings-section"><div class="settings-section-title">数据管理</div>'
+      +'<button class="data-btn" id="set-export">📤 导出数据</button>'
+      +'<button class="data-btn" id="set-import">📥 导入数据</button>'
+      +'<button class="data-btn danger" id="set-clear">🗑️ 清除所有数据</button></div>';
+
+    html += '<div style="text-align:center;padding:24px 0;color:var(--text-light);font-size:12px">🍃 保质岛 v3.0<br>家庭物品保质期管理<br>先进先出，不浪费</div>';
+
+    el.innerHTML = html;
+
+    // Events
+    document.getElementById('set-manage-cats').addEventListener('click', function(){ showManageCategories(); });
+    document.getElementById('set-manage-locs').addEventListener('click', function(){ showManageLocations(); });
+
+    document.getElementById('set-remind').addEventListener('change', function(){
+      Storage.updateSettings({ reminderDays:parseInt(this.value) }); showToast('已更新'); updateBadge();
+    });
+    document.getElementById('set-fifo').addEventListener('change', function(){
+      Storage.updateSettings({ showFIFO:this.checked });
+    });
+    document.getElementById('set-notif').addEventListener('change', function(){
+      var cb = this;
+      if (cb.checked) {
+        if ('Notification' in window) {
+          Notification.requestPermission().then(function(p){
+            if (p==='granted') { Storage.updateSettings({notificationsEnabled:true}); showToast('通知已开启 🔔'); }
+            else { cb.checked=false; showToast('通知权限被拒绝'); }
+          });
+        } else { cb.checked=false; showToast('浏览器不支持通知'); }
+      } else { Storage.updateSettings({notificationsEnabled:false}); }
+    });
+
+    document.getElementById('set-export').addEventListener('click', function(){
+      var blob = new Blob([Storage.exportData()],{type:'application/json'});
+      var a = document.createElement('a'); a.href=URL.createObjectURL(blob);
+      a.download='shelflife_backup_'+today()+'.json'; a.click(); URL.revokeObjectURL(a.href);
+      showToast('数据已导出 📤');
+    });
+    document.getElementById('set-import').addEventListener('click', function(){
+      var input = document.createElement('input'); input.type='file'; input.accept='.json';
+      input.onchange = function(){
+        var f=input.files[0]; if(!f) return;
+        var r=new FileReader();
+        r.onload=function(){ try{ Storage.importData(r.result); showToast('数据已导入 📥'); render(); }catch(e){ showToast('导入失败'); } };
+        r.readAsText(f);
+      };
+      input.click();
+    });
+    document.getElementById('set-clear').addEventListener('click', function(){
+      showConfirm('确定清除所有数据？<br>此操作无法撤回！','⚠️',function(){ Storage.clearAll(); showToast('数据已清除'); render(); },true);
+    });
+  }
+
+  // ── Notifications ─────────────────────────────────────
+  function checkNotify() {
+    var s = Storage.getSettings();
+    if (!s.notificationsEnabled || !('Notification' in window) || Notification.permission!=='granted') return;
+    var items = Storage.getActiveItems();
+    var urgent = items.filter(function(it){ return Storage.daysUntilExpiry(it)<=s.reminderDays; });
+    if (urgent.length > 0) {
+      var expired = urgent.filter(function(it){ return Storage.daysUntilExpiry(it)<0; });
+      var title = expired.length>0 ? '⚠️ '+expired.length+' 件已过期！' : '🔔 '+urgent.length+' 件即将到期';
+      var body = urgent.slice(0,3).map(function(it){ return it.name; }).join('、');
+      new Notification(title, { body:body, tag:'shelflife' });
+    }
+  }
+
+  // ── Init ──────────────────────────────────────────────
+  (function init() {
+    document.querySelectorAll('.tab-btn').forEach(function(btn){
+      btn.addEventListener('click', function(){ switchTab(btn.dataset.tab); });
+    });
+    document.getElementById('modal-overlay').addEventListener('click', function(e){
+      if (e.target.id==='modal-overlay') hideModal();
+    });
+    document.getElementById('bell-btn').addEventListener('click', function(){ switchTab('home'); });
+    renderHome();
+    checkNotify();
+  })();
+
 })();

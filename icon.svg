@@ -1,12 +1,63 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="80" fill="#1a1a2e"/>
-  <rect x="40" y="40" width="432" height="432" rx="60" fill="#12122a"/>
-  <!-- 装饰圆环 -->
-  <circle cx="256" cy="256" r="180" fill="none" stroke="#c8a876" stroke-width="6" stroke-dasharray="8 12" opacity="0.4"/>
-  <!-- 主字 -->
-  <text x="256" y="310" font-size="220" text-anchor="middle" fill="#c8a876"
-    font-family="'Songti SC','SimSun',serif" font-weight="600">体</text>
-  <!-- 副标题 -->
-  <text x="256" y="400" font-size="52" text-anchor="middle" fill="#c8a876"
-    font-family="'PingFang SC',sans-serif" opacity="0.6" letter-spacing="8">人生体验</text>
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Ocean background -->
+  <circle cx="256" cy="256" r="256" fill="#87CEEB"/>
+  <!-- Clouds -->
+  <g fill="white" opacity="0.6">
+    <ellipse cx="115" cy="125" rx="48" ry="22"/><ellipse cx="155" cy="115" rx="38" ry="22"/>
+    <ellipse cx="385" cy="95" rx="42" ry="20"/><ellipse cx="415" cy="88" rx="32" ry="18"/>
+  </g>
+  <!-- Water -->
+  <ellipse cx="256" cy="390" rx="256" ry="130" fill="#5DADE2"/>
+  <!-- Sandy beach -->
+  <ellipse cx="256" cy="348" rx="168" ry="52" fill="#F7DC6F"/>
+  <!-- Green island -->
+  <ellipse cx="256" cy="318" rx="148" ry="72" fill="#78C850"/>
+  <ellipse cx="256" cy="308" rx="128" ry="58" fill="#82D45A"/>
+  <!-- Small hills -->
+  <ellipse cx="310" cy="290" rx="50" ry="28" fill="#6DBF47"/>
+  <ellipse cx="190" cy="295" rx="40" ry="22" fill="#6DBF47"/>
+  <!-- Palm tree trunk -->
+  <path d="M185 308 C182 268 190 228 196 192" stroke="#A0722A" stroke-width="13" fill="none" stroke-linecap="round"/>
+  <!-- Palm leaves -->
+  <g fill="#27AE60">
+    <ellipse cx="165" cy="188" rx="42" ry="13" transform="rotate(-22 165 188)"/>
+    <ellipse cx="228" cy="182" rx="42" ry="13" transform="rotate(18 228 182)"/>
+    <ellipse cx="178" cy="168" rx="36" ry="11" transform="rotate(-48 178 168)"/>
+    <ellipse cx="218" cy="166" rx="36" ry="11" transform="rotate(42 218 166)"/>
+    <ellipse cx="196" cy="160" rx="30" ry="10" transform="rotate(-5 196 160)"/>
+  </g>
+  <!-- Coconuts -->
+  <circle cx="194" cy="198" r="7" fill="#A0722A"/><circle cx="204" cy="195" r="6.5" fill="#8B6914"/>
+  <!-- Cute house -->
+  <rect x="285" y="275" width="66" height="42" rx="5" fill="#FADBD8"/>
+  <path d="M280 275 L318 247 L356 275 Z" fill="#E74C3C"/>
+  <rect x="306" y="293" width="16" height="24" rx="3" fill="#A0722A"/>
+  <circle cx="318" cy="305" r="2.2" fill="#F7DC6F"/>
+  <rect x="289" y="284" width="12" height="12" rx="2" fill="#AED6F1"/>
+  <rect x="340" y="284" width="12" height="12" rx="2" fill="#AED6F1"/>
+  <!-- AC leaf on roof -->
+  <g transform="translate(318,242) scale(0.3)">
+    <path d="M0-38C28-33 42-8 38 25C33 52 5 57 0 57C-5 57-33 52-38 25C-42-8-28-33 0-38Z" fill="#2ECC71"/>
+    <line x1="0" y1="-28" x2="0" y2="50" stroke="#1E8449" stroke-width="3"/>
+    <line x1="0" y1="-2" x2="-18" y2="-14" stroke="#1E8449" stroke-width="2.5"/>
+    <line x1="0" y1="16" x2="16" y2="6" stroke="#1E8449" stroke-width="2.5"/>
+  </g>
+  <!-- Sparkle stars -->
+  <g fill="#F9E79F">
+    <polygon points="395,155 399,166 410,166 401,173 404,184 395,177 386,184 389,173 380,166 391,166"/>
+    <polygon points="108,200 111,208 119,208 113,213 115,221 108,216 101,221 103,213 97,208 105,208" transform="scale(0.85) translate(16,40)"/>
+  </g>
+  <!-- Small flower on island -->
+  <g transform="translate(350,298)">
+    <circle cx="0" cy="0" r="5" fill="#FFB7B2"/><circle cx="0" cy="-5" r="3.5" fill="#FF8A80"/>
+    <circle cx="4.7" cy="-1.5" r="3.5" fill="#FF8A80"/><circle cx="2.9" cy="4" r="3.5" fill="#FF8A80"/>
+    <circle cx="-2.9" cy="4" r="3.5" fill="#FF8A80"/><circle cx="-4.7" cy="-1.5" r="3.5" fill="#FF8A80"/>
+    <circle cx="0" cy="0" r="3" fill="#F9E79F"/>
+  </g>
+  <g transform="translate(160,305) scale(0.7)">
+    <circle cx="0" cy="0" r="5" fill="#C7CEEA"/><circle cx="0" cy="-5" r="3.5" fill="#AED6F1"/>
+    <circle cx="4.7" cy="-1.5" r="3.5" fill="#AED6F1"/><circle cx="2.9" cy="4" r="3.5" fill="#AED6F1"/>
+    <circle cx="-2.9" cy="4" r="3.5" fill="#AED6F1"/><circle cx="-4.7" cy="-1.5" r="3.5" fill="#AED6F1"/>
+    <circle cx="0" cy="0" r="3" fill="#F9E79F"/>
+  </g>
 </svg>
