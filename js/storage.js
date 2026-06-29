@@ -82,6 +82,33 @@ var Storage = (function() {
     }
   })();
 
+  // v3 → v4 迁移: usedAt/_origQty → consumed 字段
+  (function migrateV4() {
+    var raw = localStorage.getItem(K.items);
+    if (!raw) return;
+    try {
+      var items = JSON.parse(raw);
+      var changed = false;
+      for (var i = 0; i < items.length; i++) {
+        var it = items[i];
+        if (it.consumed === undefined) {
+          changed = true;
+          if (it.usedAt) {
+            it.consumed = it._origQty || it.quantity;
+            it.quantity = 0;
+          } else if (it._origQty) {
+            it.consumed = it._origQty - it.quantity;
+          } else {
+            it.consumed = 0;
+          }
+          delete it.usedAt;
+          delete it._origQty;
+        }
+      }
+      if (changed) localStorage.setItem(K.items, JSON.stringify(items));
+    } catch(e) {}
+  })();
+
   function _r(key, fb) {
     try { var v = localStorage.getItem(key); return v ? JSON.parse(v) : fb; }
     catch(e) { return fb; }
@@ -239,7 +266,7 @@ var Storage = (function() {
   function getAllItems() { return _r(K.items, []); }
 
   function getActiveItems() {
-    return getAllItems().filter(function(it) { return !it.usedAt; });
+    return getAllItems().filter(function(it) { return it.quantity > 0; });
   }
 
   function getItem(id) {
@@ -263,7 +290,7 @@ var Storage = (function() {
       openedDate: null,
       afterOpeningDays: data.afterOpeningDays || null,
       createdAt: Date.now(),
-      usedAt: null
+      consumed: 0
     };
     items.push(item);
     _w(K.items, items);
@@ -284,35 +311,46 @@ var Storage = (function() {
   function consumeOne(id) {
     var items = getAllItems();
     for (var i = 0; i < items.length; i++) {
-      if (items[i].id === id) {
-        if (!items[i]._origQty) items[i]._origQty = items[i].quantity;
-        items[i].quantity = Math.max(0, items[i].quantity - 1);
-        if (items[i].quantity === 0) items[i].usedAt = Date.now();
+      if (items[i].id === id && items[i].quantity > 0) {
+        items[i].quantity -= 1;
+        items[i].consumed = (items[i].consumed || 0) + 1;
         break;
       }
     }
     _w(K.items, items);
   }
 
-  function markUsed(id) {
+  function consumeAll(id) {
     var items = getAllItems();
     for (var i = 0; i < items.length; i++) {
-      if (items[i].id === id) {
-        if (!items[i]._origQty) items[i]._origQty = items[i].quantity;
-        items[i].usedAt = Date.now();
+      if (items[i].id === id && items[i].quantity > 0) {
+        items[i].consumed = (items[i].consumed || 0) + items[i].quantity;
+        items[i].quantity = 0;
         break;
       }
     }
     _w(K.items, items);
   }
 
-  function restoreItem(id) {
+  function restoreOne(id) {
     var items = getAllItems();
     for (var i = 0; i < items.length; i++) {
-      if (items[i].id === id) {
-        items[i].usedAt = null;
-        if (items[i]._origQty) { items[i].quantity = items[i]._origQty; delete items[i]._origQty; }
-        else if (items[i].quantity === 0) items[i].quantity = 1;
+      if (items[i].id === id && items[i].consumed > 0) {
+        items[i].consumed -= 1;
+        items[i].quantity += 1;
+        break;
+      }
+    }
+    _w(K.items, items);
+  }
+
+  function restoreN(id, n) {
+    var items = getAllItems();
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].id === id && items[i].consumed > 0) {
+        var actual = Math.min(n, items[i].consumed);
+        items[i].consumed -= actual;
+        items[i].quantity += actual;
         break;
       }
     }
@@ -320,7 +358,7 @@ var Storage = (function() {
   }
 
   function getConsumedItems() {
-    return getAllItems().filter(function(it) { return !!it.usedAt; });
+    return getAllItems().filter(function(it) { return it.consumed > 0; });
   }
 
   function deleteItem(id) {
@@ -447,8 +485,9 @@ var Storage = (function() {
     addItem: addItem,
     updateItem: updateItem,
     consumeOne: consumeOne,
-    markUsed: markUsed,
-    restoreItem: restoreItem,
+    consumeAll: consumeAll,
+    restoreOne: restoreOne,
+    restoreN: restoreN,
     getConsumedItems: getConsumedItems,
     deleteItem: deleteItem,
     getSettings: getSettings,

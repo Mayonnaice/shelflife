@@ -244,12 +244,14 @@
     // Filters (only show if not drilled into specific category)
     if (!drillCat) {
       var f = STATE.invFilter;
-      var consumedCount = Storage.getConsumedItems().length;
+      var consumedItems = Storage.getConsumedItems();
+      var consumedTotal = 0;
+      consumedItems.forEach(function(ci){ consumedTotal += ci.consumed; });
       html += '<div class="inv-filter-bar">'
         +'<div class="filter-chip'+(f==='all'?' active':'')+'" data-filter="all">全部</div>'
         +'<div class="filter-chip'+(f==='location'?' active':'')+'" data-filter="location">按位置</div>'
         +'<div class="filter-chip'+(f==='category'?' active':'')+'" data-filter="category">按分类</div>'
-        +'<div class="filter-chip'+(f==='consumed'?' active':'')+'" data-filter="consumed">已消耗'+(consumedCount>0?' ('+consumedCount+')':'')+'</div>'
+        +'<div class="filter-chip'+(f==='consumed'?' active':'')+'" data-filter="consumed">已消耗'+(consumedTotal>0?' ('+consumedTotal+')':'')+'</div>'
         +'</div>';
     } else {
       // Show subcategory filter if this category has subcategories
@@ -273,25 +275,25 @@
     if (!drillCat && STATE.invFilter === 'consumed') {
       var consumed = Storage.getConsumedItems();
       if (search) consumed = consumed.filter(function(it){ return it.name.toLowerCase().indexOf(search)>=0; });
-      consumed.sort(function(a,b){ return (b.usedAt||0) - (a.usedAt||0); });
+      var totalConsumed = 0;
+      consumed.forEach(function(ci){ totalConsumed += ci.consumed; });
       if (consumed.length === 0) {
         html += '<div class="empty-state"><div class="empty-icon">✨</div>'
           +'<div class="empty-title">暂无已消耗物品</div>'
           +'<div class="empty-sub">消耗的物品会出现在这里</div></div>';
       } else {
+        html += '<div style="text-align:center;padding:8px 0;color:var(--text-dim);font-size:13px">共消耗 '+totalConsumed+' 件</div>';
         consumed.forEach(function(ci){
           var cat = Storage.catById(ci.categoryId);
           var loc = Storage.locById(ci.locationId);
-          var usedDate = ci.usedAt ? new Date(ci.usedAt) : null;
-          var usedStr = usedDate ? usedDate.getFullYear()+'-'+String(usedDate.getMonth()+1).padStart(2,'0')+'-'+String(usedDate.getDate()).padStart(2,'0') : '';
           html += '<div class="item-card consumed-card" data-cid="'+ci.id+'">'
             +'<div class="item-cat-icon" style="background:'+cat.color+';opacity:0.6">'+cat.icon+'</div>'
             +'<div class="item-info"><div class="item-name-row">'
             +'<span class="item-name" style="opacity:0.7">'+esc(ci.name)+'</span>'
-            +'<span class="consumed-badge">已消耗</span></div>'
+            +'<span class="consumed-badge">已消耗 '+ci.consumed+ci.unit+'</span></div>'
             +'<div class="item-meta"><span>'+loc.icon+' '+loc.name+'</span>'
-            +(ci._origQty?'<span>原'+ci._origQty+ci.unit+'</span>':'')
-            +'<span>消耗于 '+usedStr+'</span></div></div>'
+            +(ci.quantity>0?'<span>剩余'+ci.quantity+ci.unit+'</span>':'')
+            +'</div></div>'
             +'<button class="btn-restore" data-rid="'+ci.id+'">恢复</button></div>';
         });
       }
@@ -347,11 +349,17 @@
     el.querySelectorAll('.btn-restore').forEach(function(btn){
       btn.addEventListener('click', function(e){
         e.stopPropagation();
-        showConfirm('确认恢复此物品？','🔄',function(){
-          Storage.restoreItem(btn.dataset.rid);
-          showToast('已恢复 ✓');
-          renderInventory();
-        });
+        var ci = Storage.getItem(btn.dataset.rid);
+        if (!ci || ci.consumed <= 0) return;
+        if (ci.consumed === 1) {
+          showConfirm('确认恢复1'+ci.unit+'？','🔄',function(){
+            Storage.restoreOne(btn.dataset.rid);
+            showToast('已恢复1'+ci.unit+' ✓');
+            renderInventory();
+          });
+        } else {
+          showRestoreChoice(btn.dataset.rid, ci);
+        }
       });
     });
   }
@@ -552,7 +560,7 @@
       +'<div class="detail-info-item"><div class="detail-info-label">存放位置</div><div class="detail-info-value">'+loc.icon+' '+loc.name+'</div></div>'
       +'<div class="detail-info-item"><div class="detail-info-label">生产日期</div><div class="detail-info-value">'+(item.purchaseDate||'-')+'</div></div>'
       +'<div class="detail-info-item"><div class="detail-info-label">到期日期</div><div class="detail-info-value">'+(item.expiryDate||'-')+'</div></div>'
-      +'<div class="detail-info-item"><div class="detail-info-label">数量</div><div class="detail-info-value">'+item.quantity+' '+item.unit+'</div></div>'
+      +'<div class="detail-info-item"><div class="detail-info-label">数量</div><div class="detail-info-value">'+item.quantity+' '+item.unit+(item.consumed>0?' <span style="color:var(--text-dim);font-size:12px">(已消耗'+item.consumed+item.unit+')</span>':'')+'</div></div>'
       +'<div class="detail-info-item"><div class="detail-info-label">状态</div><div class="detail-info-value">'+(item.opened?'已开封':'未开封')+'</div></div>'
       +'</div>';
 
@@ -585,30 +593,19 @@
     };
     var consume1Btn = document.getElementById('detail-consume1');
     if (consume1Btn) consume1Btn.onclick = function(){
-      try {
-        var before = Storage.getItem(itemId);
-        var beforeQty = before ? before.quantity : '?';
-        Storage.consumeOne(itemId);
-        var updated = Storage.getItem(itemId);
-        var afterQty = updated ? updated.quantity : '?';
-        if (updated && updated.quantity === 0) {
-          showToast('最后1个已消耗 🎉'); hideModal();
-        } else {
-          showToast(beforeQty+'→'+afterQty+' ✓'); showDetail(itemId);
-        }
-        render();
-      } catch(e) {
-        alert('消耗出错: '+e.message);
+      Storage.consumeOne(itemId);
+      var updated = Storage.getItem(itemId);
+      if (updated && updated.quantity === 0) {
+        showToast('全部消耗完毕 🎉'); hideModal();
+      } else {
+        showToast('已消耗1'+item.unit+' ✓'); showDetail(itemId);
       }
+      render();
     };
     document.getElementById('detail-use').onclick = function(){
       showConfirm('确认'+(item.quantity>1?'全部':'')+'消耗？','✅',function(){
-        try {
-          Storage.markUsed(itemId);
-          showToast('太棒了 🎉'); hideModal(); render();
-        } catch(e) {
-          alert('消耗出错: '+e.message);
-        }
+        Storage.consumeAll(itemId);
+        showToast('太棒了 🎉'); hideModal(); render();
       });
     };
     document.getElementById('detail-edit').onclick = function(){
@@ -625,14 +622,12 @@
     var cat = Storage.catById(item.categoryId);
     var loc = Storage.locById(item.locationId);
     var sub = Storage.subById(item.categoryId, item.subcategoryId);
-    var usedDate = item.usedAt ? new Date(item.usedAt) : null;
-    var usedStr = usedDate ? usedDate.getFullYear()+'-'+String(usedDate.getMonth()+1).padStart(2,'0')+'-'+String(usedDate.getDate()).padStart(2,'0') : '';
 
     var html = '<div class="detail-header">'
       +'<div class="detail-cat-icon" style="background:'+cat.color+';opacity:0.6">'+cat.icon+'</div>'
       +'<div class="detail-name" style="opacity:0.7">'+esc(item.name)+'</div>'
       +(sub?'<span class="sub-badge" style="display:inline-block;margin-top:6px">'+esc(sub.name)+'</span>':'')
-      +'<span class="consumed-badge" style="display:inline-block;margin-top:6px">已消耗</span>'
+      +'<span class="consumed-badge" style="display:inline-block;margin-top:6px">已消耗 '+item.consumed+item.unit+'</span>'
       +'</div>';
 
     html += '<div class="detail-info-grid">'
@@ -640,8 +635,8 @@
       +'<div class="detail-info-item"><div class="detail-info-label">存放位置</div><div class="detail-info-value">'+loc.icon+' '+loc.name+'</div></div>'
       +'<div class="detail-info-item"><div class="detail-info-label">生产日期</div><div class="detail-info-value">'+(item.purchaseDate||'-')+'</div></div>'
       +'<div class="detail-info-item"><div class="detail-info-label">到期日期</div><div class="detail-info-value">'+(item.expiryDate||'-')+'</div></div>'
-      +'<div class="detail-info-item"><div class="detail-info-label">原数量</div><div class="detail-info-value">'+(item._origQty||item.quantity)+' '+item.unit+'</div></div>'
-      +'<div class="detail-info-item"><div class="detail-info-label">消耗日期</div><div class="detail-info-value">'+usedStr+'</div></div>'
+      +'<div class="detail-info-item"><div class="detail-info-label">已消耗</div><div class="detail-info-value">'+item.consumed+' '+item.unit+'</div></div>'
+      +'<div class="detail-info-item"><div class="detail-info-label">剩余</div><div class="detail-info-value">'+item.quantity+' '+item.unit+'</div></div>'
       +'</div>';
 
     if (item.notes) {
@@ -649,17 +644,28 @@
         +'<div class="detail-info-item"><div class="detail-info-label">备注</div><div class="detail-info-value">'+esc(item.notes)+'</div></div></div>';
     }
 
-    html += '<div class="detail-btns">'
-      +'<button class="btn-use" id="cd-restore" style="background:var(--sky)">🔄 恢复物品</button>'
+    html += '<div class="detail-btns">';
+    if (item.consumed > 1)
+      html += '<button class="btn-use" id="cd-restore1" style="background:var(--sky)">恢复1'+item.unit+'</button>';
+    html += '<button class="btn-use" id="cd-restore-all" style="background:var(--sky)">🔄 全部恢复 ('+item.consumed+item.unit+')</button>'
       +'<button class="btn-delete" id="cd-delete">删除记录</button></div>';
 
     document.getElementById('modal-content').innerHTML = html;
     document.getElementById('modal-overlay').classList.remove('hidden');
 
-    document.getElementById('cd-restore').onclick = function(){
-      showConfirm('确认恢复此物品？','🔄',function(){
-        Storage.restoreItem(itemId);
-        showToast('已恢复 ✓'); hideModal(); render();
+    var r1 = document.getElementById('cd-restore1');
+    if (r1) r1.onclick = function(){
+      Storage.restoreOne(itemId);
+      showToast('已恢复1'+item.unit+' ✓');
+      var updated = Storage.getItem(itemId);
+      if (updated && updated.consumed > 0) { showConsumedDetail(itemId); }
+      else { hideModal(); }
+      render();
+    };
+    document.getElementById('cd-restore-all').onclick = function(){
+      showConfirm('确认全部恢复 '+item.consumed+item.unit+'？','🔄',function(){
+        Storage.restoreN(itemId, item.consumed);
+        showToast('已全部恢复 ✓'); hideModal(); render();
       });
     };
     document.getElementById('cd-delete').onclick = function(){
@@ -667,6 +673,30 @@
         Storage.deleteItem(itemId); showToast('已删除'); hideModal(); render();
       },true);
     };
+  }
+
+  function showRestoreChoice(itemId, item) {
+    var ov = document.createElement('div');
+    ov.className = 'confirm-overlay';
+    ov.innerHTML = '<div class="confirm-box"><div class="confirm-icon">🔄</div>'
+      +'<div class="confirm-msg">恢复多少'+item.unit+'？（已消耗'+item.consumed+item.unit+'）</div>'
+      +'<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px">'
+      +'<button class="confirm-ok" data-rn="1">恢复1'+item.unit+'</button>'
+      +(item.consumed>2?'<button class="confirm-ok" data-rn="'+Math.floor(item.consumed/2)+'">恢复'+Math.floor(item.consumed/2)+item.unit+'</button>':'')
+      +'<button class="confirm-ok" data-rn="'+item.consumed+'">全部恢复</button>'
+      +'</div>'
+      +'<div style="margin-top:12px"><button class="confirm-cancel">取消</button></div></div>';
+    document.getElementById('app').appendChild(ov);
+    ov.querySelector('.confirm-cancel').onclick = function(){ ov.remove(); };
+    ov.querySelectorAll('[data-rn]').forEach(function(btn){
+      btn.onclick = function(){
+        var n = parseInt(btn.dataset.rn);
+        Storage.restoreN(itemId, n);
+        showToast('已恢复'+n+item.unit+' ✓');
+        ov.remove();
+        renderInventory();
+      };
+    });
   }
 
   function hideModal() { document.getElementById('modal-overlay').classList.add('hidden'); }
@@ -906,8 +936,8 @@
     var el = document.getElementById('view-settings');
     var settings = Storage.getSettings();
     var items = Storage.getAllItems();
-    var activeCount = items.filter(function(it){ return !it.usedAt; }).length;
-    var usedCount = items.filter(function(it){ return !!it.usedAt; }).length;
+    var activeCount = 0, usedCount = 0;
+    items.forEach(function(it){ activeCount += it.quantity; usedCount += (it.consumed || 0); });
 
     var html = '<div class="form-title">设置</div>';
 
@@ -948,7 +978,7 @@
       +'<button class="data-btn" id="set-debug">🔍 检查数据库状态</button>'
       +'<div id="debug-output" style="display:none;margin-top:8px;padding:12px;background:#f5f5f5;border-radius:8px;font-size:12px;word-break:break-all;max-height:300px;overflow:auto"></div></div>';
 
-    html += '<div style="text-align:center;padding:24px 0;color:var(--text-light);font-size:12px">🍃 保质岛 v3.2<br>家庭物品保质期管理<br>先进先出，不浪费</div>';
+    html += '<div style="text-align:center;padding:24px 0;color:var(--text-light);font-size:12px">🍃 保质岛 v4.0<br>家庭物品保质期管理<br>先进先出，不浪费</div>';
 
     el.innerHTML = html;
 
@@ -992,24 +1022,17 @@
     });
     document.getElementById('set-debug').addEventListener('click', function(){
       var all = Storage.getAllItems();
-      var active = all.filter(function(it){ return !it.usedAt; });
-      var consumed = all.filter(function(it){ return !!it.usedAt; });
-      var info = '总物品数: ' + all.length + '\n'
-        + '在管: ' + active.length + '\n'
-        + '已消耗: ' + consumed.length + '\n'
+      var totalQty = 0, totalConsumed = 0;
+      all.forEach(function(it){ totalQty += it.quantity; totalConsumed += (it.consumed || 0); });
+      var info = '物品种类: ' + all.length + '\n'
+        + '在管(件): ' + totalQty + '\n'
+        + '已消耗(件): ' + totalConsumed + '\n'
         + '---全部物品---\n';
       all.forEach(function(it, idx){
         info += (idx+1) + '. ' + it.name + ' | qty:' + it.quantity
-          + ' | usedAt:' + (it.usedAt || '无')
-          + ' | _origQty:' + (it._origQty || '无')
+          + ' | consumed:' + (it.consumed || 0)
           + ' | id:' + it.id + '\n';
       });
-      info += '---函数检查---\n';
-      info += 'consumeOne: ' + (typeof Storage.consumeOne) + '\n';
-      info += 'restoreItem: ' + (typeof Storage.restoreItem) + '\n';
-      info += 'getConsumedItems: ' + (typeof Storage.getConsumedItems) + '\n';
-      info += '---localStorage原始数据---\n';
-      info += localStorage.getItem('sl_items');
       var el = document.getElementById('debug-output');
       el.style.display = 'block';
       el.textContent = info;
