@@ -585,17 +585,31 @@
     };
     var consume1Btn = document.getElementById('detail-consume1');
     if (consume1Btn) consume1Btn.onclick = function(){
-      Storage.consumeOne(itemId);
-      var updated = Storage.getItem(itemId);
-      if (updated && updated.quantity === 0) {
-        showToast('最后1个已消耗 🎉'); hideModal();
-      } else {
-        showToast('已消耗1'+item.unit+' ✓'); showDetail(itemId);
+      try {
+        var before = Storage.getItem(itemId);
+        var beforeQty = before ? before.quantity : '?';
+        Storage.consumeOne(itemId);
+        var updated = Storage.getItem(itemId);
+        var afterQty = updated ? updated.quantity : '?';
+        if (updated && updated.quantity === 0) {
+          showToast('最后1个已消耗 🎉'); hideModal();
+        } else {
+          showToast(beforeQty+'→'+afterQty+' ✓'); showDetail(itemId);
+        }
+        render();
+      } catch(e) {
+        alert('消耗出错: '+e.message);
       }
-      render();
     };
     document.getElementById('detail-use').onclick = function(){
-      showConfirm('确认'+(item.quantity>1?'全部':'')+'消耗？','✅',function(){ Storage.markUsed(itemId); showToast('太棒了 🎉'); hideModal(); render(); });
+      showConfirm('确认'+(item.quantity>1?'全部':'')+'消耗？','✅',function(){
+        try {
+          Storage.markUsed(itemId);
+          showToast('太棒了 🎉'); hideModal(); render();
+        } catch(e) {
+          alert('消耗出错: '+e.message);
+        }
+      });
     };
     document.getElementById('detail-edit').onclick = function(){
       STATE.editingId = itemId; hideModal(); switchTab('add'); renderAdd(item);
@@ -934,7 +948,7 @@
       +'<button class="data-btn" id="set-debug">🔍 检查数据库状态</button>'
       +'<div id="debug-output" style="display:none;margin-top:8px;padding:12px;background:#f5f5f5;border-radius:8px;font-size:12px;word-break:break-all;max-height:300px;overflow:auto"></div></div>';
 
-    html += '<div style="text-align:center;padding:24px 0;color:var(--text-light);font-size:12px">🍃 保质岛 v3.1<br>家庭物品保质期管理<br>先进先出，不浪费</div>';
+    html += '<div style="text-align:center;padding:24px 0;color:var(--text-light);font-size:12px">🍃 保质岛 v3.2<br>家庭物品保质期管理<br>先进先出，不浪费</div>';
 
     el.innerHTML = html;
 
