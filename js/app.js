@@ -929,7 +929,12 @@
       +'<button class="data-btn" id="set-import">📥 导入数据</button>'
       +'<button class="data-btn danger" id="set-clear">🗑️ 清除所有数据</button></div>';
 
-    html += '<div style="text-align:center;padding:24px 0;color:var(--text-light);font-size:12px">🍃 保质岛 v3.0<br>家庭物品保质期管理<br>先进先出，不浪费</div>';
+    // Debug
+    html += '<div class="settings-section"><div class="settings-section-title">调试信息</div>'
+      +'<button class="data-btn" id="set-debug">🔍 检查数据库状态</button>'
+      +'<div id="debug-output" style="display:none;margin-top:8px;padding:12px;background:#f5f5f5;border-radius:8px;font-size:12px;word-break:break-all;max-height:300px;overflow:auto"></div></div>';
+
+    html += '<div style="text-align:center;padding:24px 0;color:var(--text-light);font-size:12px">🍃 保质岛 v3.1<br>家庭物品保质期管理<br>先进先出，不浪费</div>';
 
     el.innerHTML = html;
 
@@ -970,6 +975,30 @@
         r.readAsText(f);
       };
       input.click();
+    });
+    document.getElementById('set-debug').addEventListener('click', function(){
+      var all = Storage.getAllItems();
+      var active = all.filter(function(it){ return !it.usedAt; });
+      var consumed = all.filter(function(it){ return !!it.usedAt; });
+      var info = '总物品数: ' + all.length + '\n'
+        + '在管: ' + active.length + '\n'
+        + '已消耗: ' + consumed.length + '\n'
+        + '---全部物品---\n';
+      all.forEach(function(it, idx){
+        info += (idx+1) + '. ' + it.name + ' | qty:' + it.quantity
+          + ' | usedAt:' + (it.usedAt || '无')
+          + ' | _origQty:' + (it._origQty || '无')
+          + ' | id:' + it.id + '\n';
+      });
+      info += '---函数检查---\n';
+      info += 'consumeOne: ' + (typeof Storage.consumeOne) + '\n';
+      info += 'restoreItem: ' + (typeof Storage.restoreItem) + '\n';
+      info += 'getConsumedItems: ' + (typeof Storage.getConsumedItems) + '\n';
+      info += '---localStorage原始数据---\n';
+      info += localStorage.getItem('sl_items');
+      var el = document.getElementById('debug-output');
+      el.style.display = 'block';
+      el.textContent = info;
     });
     document.getElementById('set-clear').addEventListener('click', function(){
       showConfirm('确定清除所有数据？<br>此操作无法撤回！','⚠️',function(){ Storage.clearAll(); showToast('数据已清除'); render(); },true);

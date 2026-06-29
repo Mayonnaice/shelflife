@@ -66,7 +66,11 @@
     <div id="toast" class="toast hidden"></div>
   </div>
 
-  <script src="js/storage.js?v=3"></script>
-  <script src="js/app.js?v=3"></script>
+  <script>
+    // 强制不缓存：动态加载JS
+    var t = Date.now();
+    document.write('<scr'+'ipt src="js/storage.js?t='+t+'"><\/scr'+'ipt>');
+    document.write('<scr'+'ipt src="js/app.js?t='+t+'"><\/scr'+'ipt>');
+  </script>
 </body>
 </html>
